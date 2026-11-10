@@ -2,38 +2,137 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Dark is the default theme. Accent #FF0B55 is decorative only (too low in
+   contrast for small text): timeline dots, the Now status dot, selection. */
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --muted-foreground: #a1a1aa;
-  --border: rgba(255, 255, 255, 0.1);
-  --card: rgba(255, 255, 255, 0.03);
-  --card-hover-border: rgba(255, 255, 255, 0.2);
-  --accent-glow: rgba(255, 255, 255, 0.08);
+  --surface: #2e2c2b;
+  --fg: #f0eee9;
+  --muted: #a9a6a1;
+  --line: rgba(240, 238, 233, 0.12);
+  --glow: rgba(240, 238, 233, 0.45);
+  --glow-soft: rgba(240, 238, 233, 0.18);
+  --accent: #ff0b55;
+  --card: #393635;
+  --wave-base: #232120;
+  --wave-high: #f0eee9;
 }
 
 .light {
-  --background: #ffffff;
-  --foreground: #171717;
-  --muted-foreground: #71717a;
-  --border: rgba(0, 0, 0, 0.1);
-  --card: rgba(0, 0, 0, 0.02);
-  --card-hover-border: rgba(0, 0, 0, 0.15);
-  --accent-glow: rgba(0, 0, 0, 0.06);
+  --surface: #f0eee9;
+  --fg: #2e2c2b;
+  --muted: #5f5c5a;
+  --line: rgba(46, 44, 43, 0.14);
+  --glow: rgba(46, 44, 43, 0.35);
+  --glow-soft: rgba(46, 44, 43, 0.14);
+  --card: #2e2c2b;
+  --wave-base: #e2dfd8;
+  --wave-high: #2e2c2b;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
   --color-card: var(--card);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-space-mono);
+}
+
+html {
+  scroll-padding-top: 5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--accent);
+  color: #f0eee9;
+}
+
+/* Spotlight navbar: glass pill with a glow that follows the cursor. */
+/* White glow follows the cursor; the line under the active item is accent. */
+.spotlight-nav {
+  --spotlight-color: rgba(240, 238, 233, 0.16);
+  --ambience-color: var(--accent);
+}
+
+.light .spotlight-nav {
+  --spotlight-color: rgba(46, 44, 43, 0.1);
+}
+
+.spotlight-nav-bg {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.glass-border {
+  border: 1px solid var(--line);
+}
+
+.spotlight-nav-shadow {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Now card glow */
+@keyframes now-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(0, 0);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translate(-6%, 4%);
+  }
+}
+
+.now-glow {
+  position: absolute;
+  right: -25%;
+  top: -60%;
+  width: 85%;
+  aspect-ratio: 1;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(240, 238, 233, 0.16), transparent 65%);
+  filter: blur(24px);
+  animation: now-glow 9s ease-in-out infinite;
+}
+
+/* Morph title: static line instead of the morph when motion is reduced. */
+.morph-static {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .morph-word-rotator {
+    display: none !important;
+  }
+
+  .morph-static {
+    display: block;
+  }
+
+  .now-glow {
+    animation: none;
+  }
 }

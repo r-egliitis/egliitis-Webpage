@@ -3,6 +3,7 @@
 import { ThemeProvider } from "next-themes";
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
+import { LanguageProvider } from "@/components/language-provider";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -13,7 +14,9 @@ export function Providers({ children }: { children: ReactNode }) {
       themes={["light", "dark"]}
       disableTransitionOnChange
     >
-      <MotionConfig reducedMotion="user">{children}</MotionConfig>
+      <LanguageProvider>
+        <MotionConfig reducedMotion="user">{children}</MotionConfig>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

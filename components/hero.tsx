@@ -1,69 +1,48 @@
 "use client";
 
-import { motion } from "motion/react";
 import { Container } from "@/components/container";
+import { HeroWaves } from "@/components/hero-waves";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
-import { ArrowRightIcon } from "@/components/ui/icons";
-import { siteConfig } from "@/content/site";
+import { MorphText } from "@/components/ui/morph-text";
 
 export function Hero() {
-  return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center"
-      >
-        <motion.div
-          animate={{ opacity: [0.5, 0.8, 0.5] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="h-[480px] w-[480px] rounded-full blur-3xl"
-          style={{
-            background:
-              "radial-gradient(circle, var(--accent-glow), transparent 70%)",
-          }}
-        />
-      </div>
+  const { t } = useLanguage();
+  const fields = t.hero.headline.split(" × ");
 
-      <Container className="flex flex-col items-start gap-6 py-28 sm:py-36">
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="text-sm font-medium text-muted-foreground"
-        >
-          {siteConfig.role}
-        </motion.p>
-        <motion.h1
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.05, ease: "easeOut" }}
-          className="text-5xl font-semibold tracking-tight sm:text-7xl"
-        >
-          {siteConfig.name}
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-          className="max-w-xl text-lg leading-8 text-muted-foreground"
-        >
-          {siteConfig.tagline}
-        </motion.p>
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-          className="flex flex-wrap gap-4 pt-2"
-        >
-          <Button href="#projects">
-            View work
-            <ArrowRightIcon />
+  return (
+    <section id="top" className="pt-16 sm:pt-24">
+      {/* Read in order of importance: who (name), backed by credentials,
+          then what (title), why (subline), and finally the action (buttons). */}
+      <Container className="flex flex-col items-center text-center">
+        <p className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.hero.name}</p>
+        <div className="mt-3 flex max-w-[52ch] flex-wrap items-center justify-center gap-x-4 gap-y-1 font-mono text-xs leading-relaxed text-muted">
+          <span>{t.hero.label}</span>
+          <span className="flex items-center gap-2">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent" />
+            {t.hero.location}
+          </span>
+        </div>
+
+        {/* The morph is decorative; this is the heading screen readers get. */}
+        <h1 className="sr-only">{t.hero.headline}</h1>
+        <MorphText words={fields} staticText={t.hero.headline} className="mt-8 sm:mt-10" />
+
+        <p className="mt-6 max-w-[36rem] text-lg leading-relaxed text-muted sm:text-xl">
+          {t.hero.subline}
+        </p>
+        <div className="mt-12 flex flex-wrap justify-center gap-3 sm:mt-14">
+          <Button href="#contact">{t.hero.primaryButton}</Button>
+          <Button href="#about" variant="secondary">
+            {t.hero.secondaryButton}
           </Button>
-          <Button href="#contact" variant="secondary">
-            Contact
-          </Button>
-        </motion.div>
+        </div>
       </Container>
+
+      {/* TODO: add /public/photo.jpg somewhere in the hero when it's ready. */}
+      <div className="mt-12 sm:mt-16">
+        <HeroWaves />
+      </div>
     </section>
   );
 }
