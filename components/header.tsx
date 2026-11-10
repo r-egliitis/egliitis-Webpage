@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Container } from "@/components/container";
 import { LanguageSwitch } from "@/components/language-switch";
 import { useLanguage } from "@/components/language-provider";
@@ -45,15 +46,13 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-surface/80 backdrop-blur-md">
       <Container className="flex h-16 items-center justify-between gap-4">
-        {/* Logo: the domain name, scrambles in a ripple on hover. */}
-        <AsciiGlitchRipple
-          href="#top"
-          aria-label="egliitis"
-          dur={500}
-          className="text-lg font-bold tracking-tight"
-        >
-          egliitis
-        </AsciiGlitchRipple>
+        {/* Logo: jester mark + the domain name, which scrambles in a ripple on hover. */}
+        <a href="#top" aria-label="egliitis" className="flex items-center gap-2">
+          <Image src="/joker.png" alt="" width={24} height={24} preload />
+          <AsciiGlitchRipple as="span" dur={500} className="text-lg font-bold tracking-tight">
+            egliitis
+          </AsciiGlitchRipple>
+        </a>
         <SpotlightNavbar
           items={navItems}
           activeIndex={active}
