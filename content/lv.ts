@@ -2,7 +2,7 @@ import type { Dictionary } from "@/content/en";
 
 export const lv: Dictionary = {
   meta: {
-    title: "Roberts Eglītis – Bizness × Dizains × Tehnoloģijas",
+    title: "egliitis",
     description:
       "Roberts Eglītis – starptautiskā biznesa students no Latvijas, kas apvieno programmēšanu, dizainu un mākslu ar biznesu.",
   },

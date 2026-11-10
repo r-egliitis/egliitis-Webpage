@@ -71,7 +71,7 @@ export type Dictionary = {
 
 export const en: Dictionary = {
   meta: {
-    title: "Roberts Eglītis – Business × Design × Tech",
+    title: "egliitis",
     description:
       "Roberts Eglītis – International Business student from Latvia connecting programming, design and art with business.",
   },
