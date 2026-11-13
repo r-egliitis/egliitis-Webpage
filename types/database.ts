@@ -5,7 +5,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type Database = {
   __InternalSupabase: {
-    PostgrestVersion: "13";
+    PostgrestVersion: "14.18";
   };
   public: {
     Tables: {
