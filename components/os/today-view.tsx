@@ -1,16 +1,21 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOut } from "@/app/os/actions";
-import { createTask, setTaskStatus } from "@/app/os/(private)/actions/tasks";
+import { createTask, deleteTask, setTaskStatus, updateTask } from "@/app/os/(private)/actions/tasks";
+import { AreaChips } from "@/components/os/area-chips";
 import { EmptyState } from "@/components/os/empty-state";
 import { QuickAdd, type QuickAddInput } from "@/components/os/quick-add";
 import { TaskItem } from "@/components/os/task-item";
 import { TaskSection } from "@/components/os/task-section";
+import { TaskSheet } from "@/components/os/task-sheet";
 import { Toast, type ToastMessage } from "@/components/os/toast";
-import { formatLongDate } from "@/lib/os/dates";
+import { formatLongDate, todayInRiga } from "@/lib/os/dates";
 import { groupTodayTasks } from "@/lib/os/group-tasks";
-import { draftTask, statusPatch, useOptimisticTasks } from "@/lib/os/use-optimistic-tasks";
+import type { TaskUpdateInput } from "@/lib/os/schemas";
+import { draftTask, statusPatch, updatePatch, useOptimisticTasks } from "@/lib/os/use-optimistic-tasks";
+import { useUrlFilter } from "@/lib/os/use-url-filter";
 import type { Area, Project, Task, TaskStatus } from "@/types/database";
 
 type TodayViewProps = {
@@ -20,14 +25,32 @@ type TodayViewProps = {
   projects: Project[];
 };
 
-export function TodayView({ today, tasks: serverTasks, areas }: TodayViewProps) {
-  const { tasks, run, error, clearError } = useOptimisticTasks(serverTasks);
+export function TodayView({ today, tasks: allTasks, areas, projects }: TodayViewProps) {
+  const { tasks, run, error, clearError } = useOptimisticTasks(allTasks);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [areaParam, setAreaFilter] = useUrlFilter("area");
+  // Ignore a stale ?area= that no longer matches an area.
+  const areaFilter = areas.some((area) => area.id === areaParam) ? areaParam : null;
 
   const areaById = useMemo(() => new Map(areas.map((area) => [area.id, area])), [areas]);
-  const groups = useMemo(() => groupTodayTasks(tasks, today), [tasks, today]);
+  const visible = useMemo(
+    () => (areaFilter ? tasks.filter((task) => task.area_id === areaFilter) : tasks),
+    [tasks, areaFilter],
+  );
+  const groups = useMemo(() => groupTodayTasks(visible, today), [visible, today]);
   const openCount = tasks.filter((task) => task.status !== "done").length;
+
+  // A tab left open past midnight: refresh when it's looked at again.
+  const router = useRouter();
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && todayInRiga() !== today) router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [router, today]);
   const nothingToday = groups.overdue.length + groups.today.length + groups.doing.length === 0;
 
   function changeStatus(task: Task, status: TaskStatus) {
@@ -55,6 +78,14 @@ export function TodayView({ today, tasks: serverTasks, areas }: TodayViewProps) 
     void run({ type: "add", task }, () => createTask(input));
   }
 
+  function save(input: TaskUpdateInput & { id: string }) {
+    void run({ type: "patch", ids: [input.id], patch: updatePatch(input) }, () => updateTask(input));
+  }
+
+  function remove(task: Task) {
+    void run({ type: "remove", id: task.id }, () => deleteTask(task.id));
+  }
+
   const renderTask = (task: Task) => (
     <TaskItem
       key={task.id}
@@ -62,6 +93,7 @@ export function TodayView({ today, tasks: serverTasks, areas }: TodayViewProps) 
       today={today}
       area={task.area_id ? areaById.get(task.area_id) : undefined}
       onToggle={toggle}
+      onOpen={setEditing}
     />
   );
 
@@ -91,15 +123,19 @@ export function TodayView({ today, tasks: serverTasks, areas }: TodayViewProps) 
       {/* Phone: pinned above the tab bar, in thumb reach. Desktop: sticky at the top. */}
       <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 px-3 pb-2 md:sticky md:inset-x-auto md:top-0 md:bottom-auto md:mt-6 md:bg-surface md:px-0 md:py-3">
         <div className="mx-auto max-w-2xl">
-          <QuickAdd areas={areas} today={today} onAdd={add} />
+          <QuickAdd areas={areas} today={today} defaultAreaId={areaFilter} onAdd={add} />
         </div>
+      </div>
+
+      <div className="mt-6 md:mt-3">
+        <AreaChips areas={areas} value={areaFilter} onChange={setAreaFilter} />
       </div>
 
       {nothingToday && (
         <div className="mt-8">
-          <EmptyState title="Nothing due today.">
+          <EmptyState title={areaFilter ? "Nothing due today in this area." : "Nothing due today."}>
             {tasks.length === 0
-              ? "Add your first task with the bar below."
+              ? "Add your first task with the quick-add bar."
               : "Pick something from No date, or enjoy the free time."}
           </EmptyState>
         </div>
@@ -128,6 +164,14 @@ export function TodayView({ today, tasks: serverTasks, areas }: TodayViewProps) 
         </details>
       )}
 
+      <TaskSheet
+        task={editing}
+        areas={areas}
+        projects={projects}
+        onClose={() => setEditing(null)}
+        onSave={save}
+        onDelete={remove}
+      />
       <Toast toast={errorToast ?? toast} onDismiss={error ? clearError : dismissToast} />
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useOptimistic, useState, useTransition } from "react";
-import type { ActionResult } from "@/lib/os/schemas";
+import type { ActionResult, TaskUpdateInput } from "@/lib/os/schemas";
 import type { Task, TaskStatus } from "@/types/database";
 
 // Shared optimistic-update plumbing for every task list in /os.
@@ -30,6 +30,19 @@ function applyChange(tasks: Task[], change: TaskChange): Task[] {
 /** The fields a status change touches, mirroring the DB trigger. */
 export function statusPatch(status: TaskStatus): Partial<Task> {
   return { status, completed_at: status === "done" ? new Date().toISOString() : null };
+}
+
+/** The optimistic row change for an updateTask() call. */
+export function updatePatch(input: TaskUpdateInput): Partial<Task> {
+  return {
+    ...(input.title !== undefined && { title: input.title }),
+    ...(input.notes !== undefined && { notes: input.notes }),
+    ...(input.areaId !== undefined && { area_id: input.areaId }),
+    ...(input.projectId !== undefined && { project_id: input.projectId }),
+    ...(input.dueDate !== undefined && { due_date: input.dueDate }),
+    ...(input.priority !== undefined && { priority: input.priority }),
+    ...(input.status !== undefined && statusPatch(input.status)),
+  };
 }
 
 /** A placeholder row for a task that hasn't reached the server yet. */
