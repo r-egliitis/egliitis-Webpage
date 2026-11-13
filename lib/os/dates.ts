@@ -52,7 +52,7 @@ export function formatDayLabel(iso: string, today: string): string {
   return shortFormatter.format(toUtcDate(iso));
 }
 
-/** e.g. "Friday, 13 November". */
+/** e.g. "Friday 13 November". */
 export function formatLongDate(iso: string): string {
   return longFormatter.format(toUtcDate(iso));
 }
