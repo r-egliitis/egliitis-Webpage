@@ -10,6 +10,7 @@ export const lv: Dictionary = {
     mainNav: "Galvenā navigācija",
     languageSwitch: "Izvēlēties valodu",
     themeToggle: "Pārslēgt krāsu tēmu",
+    osLink: "Atvērt privāto OS",
   },
   nav: {
     about: "Par mani",

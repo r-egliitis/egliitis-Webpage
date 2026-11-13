@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Container } from "@/components/container";
 import { LanguageSwitch } from "@/components/language-switch";
 import { useLanguage } from "@/components/language-provider";
@@ -62,6 +63,15 @@ export function Header() {
         <div className="flex items-center gap-4">
           <LanguageSwitch />
           <ThemeToggle />
+          <Link
+            href="/os"
+            prefetch={false}
+            aria-label={t.a11y.osLink}
+            title="OS"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line transition-[border-color,box-shadow] hover:border-fg hover:shadow-[0_0_20px_var(--glow-soft)]"
+          >
+            <Image src="/joker.png" alt="" width={18} height={18} />
+          </Link>
         </div>
       </Container>
     </header>

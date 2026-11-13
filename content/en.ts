@@ -7,6 +7,7 @@ export type Dictionary = {
     mainNav: string;
     languageSwitch: string;
     themeToggle: string;
+    osLink: string;
   };
   nav: {
     about: string;
@@ -79,6 +80,7 @@ export const en: Dictionary = {
     mainNav: "Main navigation",
     languageSwitch: "Choose language",
     themeToggle: "Toggle color theme",
+    osLink: "Open private OS",
   },
   nav: {
     about: "About",
