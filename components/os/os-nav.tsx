@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 import { ProjectsIcon, TasksIcon, TodayIcon } from "@/components/os/os-icons";
 import { cn } from "@/lib/utils";
 
@@ -16,13 +17,26 @@ const items = [
   },
 ] as const;
 
-/** Desktop: vertical list in the sidebar. */
-export function OsSidebarNav() {
-  const pathname = usePathname();
+// The pathname is runtime data on dynamic routes (/os/projects/[id]), so the
+// links prerender without a highlight and the active state streams in.
+function withPathname(Nav: (props: { pathname: string | null }) => React.ReactNode) {
+  function Current() {
+    return <Nav pathname={usePathname()} />;
+  }
+  return function NavWithPathname() {
+    return (
+      <Suspense fallback={<Nav pathname={null} />}>
+        <Current />
+      </Suspense>
+    );
+  };
+}
+
+function SidebarNav({ pathname }: { pathname: string | null }) {
   return (
     <nav aria-label="OS" className="mt-10 flex flex-col gap-1">
       {items.map(({ href, label, Icon, match }) => {
-        const active = match(pathname);
+        const active = pathname !== null && match(pathname);
         return (
           <Link
             key={href}
@@ -42,9 +56,7 @@ export function OsSidebarNav() {
   );
 }
 
-/** Phone: tab bar fixed to the bottom, clear of the home indicator. */
-export function OsTabBar() {
-  const pathname = usePathname();
+function TabBar({ pathname }: { pathname: string | null }) {
   return (
     <nav
       aria-label="OS"
@@ -52,7 +64,7 @@ export function OsTabBar() {
     >
       <ul className="mx-auto flex max-w-md">
         {items.map(({ href, label, Icon, match }) => {
-          const active = match(pathname);
+          const active = pathname !== null && match(pathname);
           return (
             <li key={href} className="flex-1">
               <Link
@@ -65,10 +77,7 @@ export function OsTabBar() {
               >
                 <Icon />
                 {label}
-                <span
-                  aria-hidden
-                  className={cn("h-0.5 w-5 rounded-full", active ? "bg-accent" : "bg-transparent")}
-                />
+                <span aria-hidden className={cn("h-0.5 w-5 rounded-full", active ? "bg-accent" : "bg-transparent")} />
               </Link>
             </li>
           );
@@ -77,3 +86,9 @@ export function OsTabBar() {
     </nav>
   );
 }
+
+/** Desktop: vertical list in the sidebar. */
+export const OsSidebarNav = withPathname(SidebarNav);
+
+/** Phone: tab bar fixed to the bottom, clear of the home indicator. */
+export const OsTabBar = withPathname(TabBar);

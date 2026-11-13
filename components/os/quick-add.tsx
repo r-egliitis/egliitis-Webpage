@@ -13,6 +13,9 @@ type QuickAddProps = {
   today: string;
   /** Area preselected for new tasks (e.g. the active filter). */
   defaultAreaId?: string | null;
+  /** Start with "Today" selected (the Today screen) or with no date. */
+  dueTodayByDefault?: boolean;
+  placeholder?: string;
   onAdd: (input: QuickAddInput) => void;
 };
 
@@ -24,10 +27,17 @@ export const chipClass = (selected: boolean) =>
 
 // Title + optional area + optional due date. Enter submits; the input keeps
 // focus so several tasks can be added in a row.
-export function QuickAdd({ areas, today, defaultAreaId = null, onAdd }: QuickAddProps) {
+export function QuickAdd({
+  areas,
+  today,
+  defaultAreaId = null,
+  dueTodayByDefault = true,
+  placeholder = "Add a task…",
+  onAdd,
+}: QuickAddProps) {
   const tomorrow = addDays(today, 1);
   const [title, setTitle] = useState("");
-  const [dueDate, setDueDate] = useState<string | null>(today);
+  const [dueDate, setDueDate] = useState<string | null>(dueTodayByDefault ? today : null);
   const [areaChoice, setAreaChoice] = useState<string | null | undefined>(undefined);
   const dateInput = useRef<HTMLInputElement>(null);
 
@@ -63,7 +73,7 @@ export function QuickAdd({ areas, today, defaultAreaId = null, onAdd }: QuickAdd
           id="quick-add-title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="Add a task…"
+          placeholder={placeholder}
           autoComplete="off"
           enterKeyHint="done"
           maxLength={300}
