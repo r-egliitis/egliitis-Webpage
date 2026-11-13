@@ -1,8 +1,18 @@
+import { Suspense } from "react";
+import { ProjectsView } from "@/components/os/projects-view";
+import { ListSkeleton } from "@/components/os/skeletons";
+import { todayInRiga } from "@/lib/os/dates";
+import { getAreas, getProjectsWithCounts } from "@/lib/os/queries";
+
 export default function ProjectsPage() {
   return (
-    <div>
-      <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Projects</h1>
-      <p className="mt-2 text-muted">Projects are coming next.</p>
-    </div>
+    <Suspense fallback={<ListSkeleton rows={4} />}>
+      <ProjectsData />
+    </Suspense>
   );
+}
+
+async function ProjectsData() {
+  const [projects, areas] = await Promise.all([getProjectsWithCounts(), getAreas()]);
+  return <ProjectsView projects={projects} areas={areas} today={todayInRiga()} />;
 }

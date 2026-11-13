@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { fieldClass, labelClass, Sheet, SheetHeader } from "@/components/os/sheet";
 import { cn } from "@/lib/utils";
 import type { TaskUpdateInput } from "@/lib/os/schemas";
 import type { Area, Priority, Project, Task, TaskStatus } from "@/types/database";
@@ -14,39 +15,16 @@ type TaskSheetProps = {
   onDelete: (task: Task) => void;
 };
 
-const fieldClass =
-  "mt-1.5 block w-full rounded-xl border border-line bg-transparent px-3 py-2.5 text-base text-fg outline-none transition-[border-color] focus:border-fg";
-const labelClass = "block font-mono text-xs uppercase tracking-[0.15em] text-muted";
-
-// Edit sheet: native <dialog> as a bottom sheet on phones, centred on desktop.
 export function TaskSheet({ task, ...props }: TaskSheetProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (task && !element.open) element.showModal();
-    if (!task && element.open) element.close();
-  }, [task]);
-
   return (
-    <dialog
-      ref={dialog}
-      onClose={props.onClose}
-      aria-label="Edit task"
-      className={cn(
-        "m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-3xl border border-line bg-surface p-0 text-fg",
-        "backdrop:bg-black/50 backdrop:backdrop-blur-[2px]",
-        "md:m-auto md:max-w-lg md:rounded-3xl",
-      )}
-    >
+    <Sheet open={task !== null} label="Edit task" onClose={props.onClose}>
       {/* Keyed by id so the form resets for each task. */}
       {task && <TaskForm key={task.id} task={task} {...props} />}
-    </dialog>
+    </Sheet>
   );
 }
 
-function Segmented<T extends string | number>({
+export function Segmented<T extends string | number>({
   label,
   value,
   options,
@@ -120,14 +98,7 @@ function TaskForm({ task, areas, projects, onClose, onSave, onDelete }: Omit<Tas
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-5 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6">
-      <div aria-hidden className="mx-auto -mt-2 h-1 w-10 rounded-full bg-line md:hidden" />
-
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight">Edit task</h2>
-        <button type="button" onClick={onClose} aria-label="Close" className="h-9 w-9 rounded-full text-xl text-muted hover:text-fg">
-          ×
-        </button>
-      </div>
+      <SheetHeader title="Edit task" onClose={onClose} />
 
       <label className={labelClass}>
         Title
