@@ -1,6 +1,5 @@
 import { Space_Grotesk, Space_Mono } from "next/font/google";
 import { Providers } from "./providers";
-import { Header } from "@/components/header";
 import "./globals.css";
 
 // latin-ext carries the Latvian letters (ā, ē, ī, ņ, š and so on).
@@ -23,10 +22,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${spaceGrotesk.variable} ${spaceMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-surface text-fg">
-        <Providers>
-          <Header />
-          {children}
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

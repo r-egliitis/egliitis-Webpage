@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { OsShell } from "@/components/os/os-shell";
 import { getUser } from "@/lib/supabase/server";
 
 // Every /os page except /os/login lives in this (private) group.
@@ -7,9 +8,11 @@ import { getUser } from "@/lib/supabase/server";
 // done server-side against the Supabase Auth server.
 export default function PrivateLayout({ children }: LayoutProps<"/os">) {
   return (
-    <Suspense fallback={null}>
-      <RequireUser>{children}</RequireUser>
-    </Suspense>
+    <OsShell>
+      <Suspense fallback={null}>
+        <RequireUser>{children}</RequireUser>
+      </Suspense>
+    </OsShell>
   );
 }
 

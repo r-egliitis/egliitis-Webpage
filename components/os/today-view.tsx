@@ -27,7 +27,7 @@ export function TodayView({ today, tasks, areas }: TodayViewProps) {
   );
 
   return (
-    <div>
+    <div className="mx-auto max-w-2xl">
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">{formatLongDate(today)}</p>
