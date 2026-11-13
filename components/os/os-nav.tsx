@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { ProjectsIcon, TasksIcon, TodayIcon } from "@/components/os/os-icons";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ const items = [
 
 // The pathname is runtime data on dynamic routes (/os/projects/[id]), so the
 // links prerender without a highlight and the active state streams in.
-function withPathname(Nav: (props: { pathname: string | null }) => React.ReactNode) {
+function withPathname(Nav: (props: { pathname: string | null }) => ReactNode) {
   function Current() {
     return <Nav pathname={usePathname()} />;
   }

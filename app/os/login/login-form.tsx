@@ -32,7 +32,9 @@ export function LoginForm() {
         />
       </label>
       {state?.error && (
-        <p role="alert" className="text-sm text-accent">
+        <p role="alert" className="text-sm">
+          {/* Accent is decorative only (too low-contrast for text), so it marks the line instead. */}
+          <span aria-hidden className="mr-2 inline-block h-2 w-2 rounded-full bg-accent" />
           {state.error}
         </p>
       )}
