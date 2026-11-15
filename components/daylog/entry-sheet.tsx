@@ -10,6 +10,8 @@ import type { DaylogTag } from "@/types/database";
 
 type EntrySheetProps = {
   entry: TimelineEntry | null;
+  /** Writing a new entry for an empty slot rather than editing one. */
+  isNew?: boolean;
   tags: Pick<DaylogTag, "id" | "name" | "color">[];
   showTags: boolean;
   onClose: () => void;
@@ -20,13 +22,13 @@ type EntrySheetProps = {
 
 export function EntrySheet({ entry, ...props }: EntrySheetProps) {
   return (
-    <Sheet open={entry !== null} label="Edit entry" onClose={props.onClose}>
+    <Sheet open={entry !== null} label={props.isNew ? "New entry" : "Edit entry"} onClose={props.onClose}>
       {entry && <EntryForm key={entry.id} entry={entry} {...props} />}
     </Sheet>
   );
 }
 
-function EntryForm({ entry, tags, showTags, onClose, onSave, onDelete, onCreateTag }: Omit<EntrySheetProps, "entry"> & { entry: TimelineEntry }) {
+function EntryForm({ entry, isNew, tags, showTags, onClose, onSave, onDelete, onCreateTag }: Omit<EntrySheetProps, "entry"> & { entry: TimelineEntry }) {
   const [body, setBody] = useState(entry.body ?? "");
   const [tagIds, setTagIds] = useState(entry.tagIds);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -48,6 +50,7 @@ function EntryForm({ entry, tags, showTags, onClose, onSave, onDelete, onCreateT
       <label className={labelClass}>
         What you did
         <textarea
+          autoFocus={isNew}
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={4}
@@ -67,7 +70,9 @@ function EntryForm({ entry, tags, showTags, onClose, onSave, onDelete, onCreateT
       )}
 
       <div className="mt-2 flex items-center justify-between gap-3">
-        {opening ? (
+        {isNew ? (
+          <span />
+        ) : opening ? (
           <span className="text-xs text-muted">The first entry started the day, so it stays.</span>
         ) : (
           <button

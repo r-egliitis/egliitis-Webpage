@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createTag, deleteEntry, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { deleteEntry, endDay, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
 import { Composer, type ComposerSubmit } from "@/components/daylog/composer";
 import { DaylogCalendar } from "@/components/daylog/daylog-calendar";
 import { EntrySheet } from "@/components/daylog/entry-sheet";
@@ -21,12 +21,12 @@ import {
   type Slot,
   type TimelineEntry,
 } from "@/lib/daylog/slots";
-import { TAG_COLORS } from "@/lib/daylog/tag-colors";
-import type { DaylogTag } from "@/types/database";
+import { useDaylogTags } from "@/lib/daylog/use-tags";
 import { formatTime } from "@/lib/daylog/time";
 import { useClock } from "@/lib/daylog/use-clock";
 import { useOptimisticEntries } from "@/lib/daylog/use-optimistic-entries";
 import { formatLongDate } from "@/lib/os/dates";
+import { cn } from "@/lib/utils";
 
 type DaylogActiveProps = {
   data: DaylogHome & { active: NonNullable<DaylogHome["active"]> };
@@ -34,8 +34,6 @@ type DaylogActiveProps = {
   /** ?slot= from a notification: focus that slot. */
   slotParam: string | null;
 };
-
-type TagLite = Pick<DaylogTag, "id" | "name" | "color">;
 
 const secondaryClass =
   "rounded-full border border-line px-3 py-1.5 font-mono text-xs text-muted transition-colors hover:border-fg hover:text-fg";
@@ -82,31 +80,9 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
     if (slotParam) inputRef.current?.focus();
   }, [slotParam]);
 
-  // Tags: server list plus ones created here that the server hasn't returned yet.
-  const [localTags, setLocalTags] = useState<TagLite[]>([]);
-  const tags = useMemo(
-    () => [...data.tags, ...localTags.filter((tag) => !data.tags.some((known) => known.id === tag.id))],
-    [data.tags, localTags],
-  );
-  const pendingTags = useRef(new Map<string, Promise<unknown>>());
+  const showError = useCallback((text: string) => setToast({ id: Date.now(), text, tone: "error" }), []);
+  const { tags, createTagLocal, tagsReady } = useDaylogTags(data.tags, showError);
   const taggingMode = day.settings_snapshot?.tagging_mode ?? "while_writing";
-
-  const createTagLocal = useCallback(
-    (name: string) => {
-      const id = crypto.randomUUID();
-      const color = TAG_COLORS[(data.tags.length + localTags.length) % TAG_COLORS.length];
-      setLocalTags((current) => [...current, { id, name, color }]);
-      const promise = createTag({ id, name, color }).then((result) => {
-        if (!result.ok) setToast({ id: Date.now(), text: result.error, tone: "error" });
-      });
-      pendingTags.current.set(id, promise);
-      return id;
-    },
-    [data.tags.length, localTags.length],
-  );
-
-  // Entries may reference a tag created a moment ago; wait for it to exist.
-  const tagsReady = useCallback((tagIds: string[]) => Promise.all(tagIds.map((id) => pendingTags.current.get(id))), []);
 
   const submit = useCallback(
     (entry: ComposerSubmit) => {
@@ -136,6 +112,17 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
   );
 
   const [editing, setEditing] = useState<TimelineEntry | null>(null);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [ending, startEnding] = useTransition();
+
+  function endTheDay() {
+    if (!confirmEnd) return setConfirmEnd(true);
+    setConfirmEnd(false);
+    startEnding(async () => {
+      const result = await endDay(day.id);
+      if (!result.ok) setToast({ id: Date.now(), text: result.error, tone: "error" });
+    });
+  }
 
   function saveEntry(entry: TimelineEntry, body: string, tagIds: string[]) {
     void run({ type: "patch", id: entry.id, patch: { body, tagIds } }, async () => {
@@ -179,6 +166,15 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
           <Link href="/os/daylog/setup" className={secondaryClass}>
             Setup
           </Link>
+          <button
+            type="button"
+            onClick={endTheDay}
+            onBlur={() => setConfirmEnd(false)}
+            disabled={ending}
+            className={cn(secondaryClass, "ml-auto", confirmEnd && "border-accent text-fg")}
+          >
+            {ending ? "Ending…" : confirmEnd ? "Tap again to end the day" : "End day"}
+          </button>
         </nav>
       </header>
 

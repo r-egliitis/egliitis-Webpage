@@ -104,11 +104,13 @@ export async function getDaylogHome(month: string): Promise<DaylogHome> {
 }
 
 /** One day by date, with its entries, for the history view. */
-export async function getDaylogDay(day: string): Promise<{ day: DaylogDay; entries: TimelineEntry[]; tags: DaylogTag[] } | null> {
+export async function getDaylogDay(
+  day: string,
+): Promise<{ day: DaylogDay; entries: TimelineEntry[]; tags: DaylogTag[]; serverNow: number } | null> {
   const supabase = await db();
   const { data, error } = await supabase.from("daylog_days").select(DAY_COLUMNS).eq("day", day).maybeSingle();
   if (error) throw error;
   if (!data) return null;
   const [entries, tags] = await Promise.all([entriesFor(data.id), getTags()]);
-  return { day: data, entries, tags };
+  return { day: data, entries, tags, serverNow: Date.now() };
 }

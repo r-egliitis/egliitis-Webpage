@@ -1,0 +1,116 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useMemo, useState } from "react";
+import { deleteEntry, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
+import { EntrySheet } from "@/components/daylog/entry-sheet";
+import { EntryStack } from "@/components/daylog/entry-stack";
+import { Toast, type ToastMessage } from "@/components/os/toast";
+import { toDayShape } from "@/lib/daylog/map";
+import { buildTimeline, timelineCounts, type Slot, type TimelineEntry } from "@/lib/daylog/slots";
+import { durationLabel, formatTime } from "@/lib/daylog/time";
+import { useOptimisticEntries } from "@/lib/daylog/use-optimistic-entries";
+import { useDaylogTags } from "@/lib/daylog/use-tags";
+import { formatLongDate } from "@/lib/os/dates";
+import type { DaylogDay, DaylogTag } from "@/types/database";
+
+type DayHistoryProps = {
+  day: DaylogDay;
+  entries: TimelineEntry[];
+  tags: DaylogTag[];
+  serverNow: number;
+};
+
+// A past (or the running) day as one timeline. Gaps can still be filled in.
+export function DayHistory({ day, entries: serverEntries, tags: serverTags, serverNow }: DayHistoryProps) {
+  const shape = useMemo(() => toDayShape(day)!, [day]);
+  const { entries, run, error, clearError } = useOptimisticEntries(serverEntries);
+  const items = useMemo(() => buildTimeline(shape, entries, serverNow), [shape, entries, serverNow]);
+  const counts = timelineCounts(items);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const showError = useCallback((text: string) => setToast({ id: Date.now(), text, tone: "error" }), []);
+  const dismissToast = useCallback(() => setToast(null), []);
+  const { tags, createTagLocal, tagsReady } = useDaylogTags(serverTags, showError);
+  const [editing, setEditing] = useState<{ entry: TimelineEntry; isNew: boolean } | null>(null);
+  const live = day.status === "active";
+  const taggingMode = day.settings_snapshot?.tagging_mode ?? "while_writing";
+
+  function fill(slot: Slot) {
+    setEditing({
+      isNew: true,
+      entry: { id: crypto.randomUUID(), kind: "slot", start: slot.start, end: slot.end, body: "", skipped: false, tagIds: [] },
+    });
+  }
+
+  function save(entry: TimelineEntry, body: string, tagIds: string[]) {
+    if (editing?.isNew) {
+      void run({ type: "add", entry: { ...entry, body, tagIds } }, async () => {
+        await tagsReady(tagIds);
+        return writeEntry({
+          kind: "slot",
+          id: entry.id,
+          dayId: day.id,
+          startAt: new Date(entry.start).toISOString(),
+          endAt: new Date(entry.end).toISOString(),
+          body,
+          tagIds,
+        });
+      });
+      return;
+    }
+    void run({ type: "patch", id: entry.id, patch: { body, tagIds } }, async () => {
+      await tagsReady(tagIds);
+      return updateEntry({ id: entry.id, body, tagIds });
+    });
+  }
+
+  function remove(entry: TimelineEntry) {
+    void run({ type: "remove", id: entry.id }, () => deleteEntry(entry.id));
+  }
+
+  const end = shape.endedAt ?? serverNow;
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <Link href="/os/daylog" className="font-mono text-xs text-muted hover:text-fg">
+        ← Day Log
+      </Link>
+      <header className="mt-4">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{formatLongDate(day.day)}</h1>
+        <p className="mt-2 font-mono text-xs text-muted">
+          {formatTime(shape.startedAt)}–{shape.endedAt ? formatTime(shape.endedAt) : "now"} · {durationLabel(end - shape.startedAt)} ·{" "}
+          {counts.filled} {counts.filled === 1 ? "entry" : "entries"}
+          {counts.empty > 0 && ` · ${counts.empty} empty`}
+          {day.end_reason === "auto" && " · ended automatically"}
+        </p>
+        {live && (
+          <Link href="/os/daylog" className="mt-4 inline-block text-sm underline decoration-line decoration-2 underline-offset-4 hover:decoration-fg">
+            Back to the live log
+          </Link>
+        )}
+      </header>
+
+      <div className="mt-8">
+        <EntryStack
+          items={items}
+          tags={tags}
+          composerRange={null}
+          onFill={fill}
+          onOpen={(entry) => setEditing({ entry, isNew: false })}
+        />
+      </div>
+
+      <EntrySheet
+        entry={editing?.entry ?? null}
+        isNew={editing?.isNew}
+        tags={tags}
+        showTags={taggingMode !== "off"}
+        onClose={() => setEditing(null)}
+        onSave={save}
+        onDelete={remove}
+        onCreateTag={createTagLocal}
+      />
+      <Toast toast={error ? { id: 0, text: error, tone: "error" } : toast} onDismiss={error ? clearError : dismissToast} />
+    </div>
+  );
+}
