@@ -6,6 +6,10 @@ import { deleteEntry, updateEntry, writeEntry } from "@/app/os/(private)/actions
 import { EntrySheet } from "@/components/daylog/entry-sheet";
 import { EntryStack } from "@/components/daylog/entry-stack";
 import { ReviewView } from "@/components/daylog/review-view";
+import { DayStatsView } from "@/components/daylog/day-stats";
+import { ExportButtons } from "@/components/daylog/export-buttons";
+import { dayToText } from "@/lib/daylog/export";
+import { dayStats } from "@/lib/daylog/stats";
 import { Toast, type ToastMessage } from "@/components/os/toast";
 import { cn } from "@/lib/utils";
 import { toDayShape } from "@/lib/daylog/map";
@@ -45,6 +49,8 @@ export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tag
   const [editing, setEditing] = useState<{ entry: TimelineEntry; isNew: boolean } | null>(null);
   const live = day.status === "active";
   const taggingMode = day.settings_snapshot?.tagging_mode ?? "while_writing";
+  const stats = useMemo(() => dayStats(shape, items, pauses, serverNow), [shape, items, pauses, serverNow]);
+  const text = useMemo(() => dayToText(day.day, items, stats, tags), [day.day, items, stats, tags]);
 
   function fill(slot: Slot, kind: "slot" | "pause" = "slot") {
     setEditing({
@@ -120,8 +126,15 @@ export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tag
               {reviewing ? "Done reviewing" : "Review tags"}
             </button>
           )}
+          <ExportButtons day={day.day} text={text} />
         </div>
       </header>
+
+      {!reviewing && (
+        <div className="mt-6">
+          <DayStatsView stats={stats} tags={tags} />
+        </div>
+      )}
 
       <div className="mt-8">
         {reviewing ? (

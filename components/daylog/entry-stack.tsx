@@ -73,7 +73,8 @@ export function EntryStack({ items, tags, composerRange, onFill, onOpen }: Entry
         const entryTags = entry.tagIds.map((id) => tagById.get(id)).filter((tag) => tag !== undefined);
         const openable = Boolean(onOpen) && !entry.skipped;
         return (
-          <li key={entry.id}>
+          // id: search results link to #entry-<id>.
+          <li key={entry.id} id={`entry-${entry.id}`} className="scroll-mt-24 target:[&>button]:ring-2 target:[&>button]:ring-fg">
             <TimeLabel>{label}</TimeLabel>
             <button
               type="button"
