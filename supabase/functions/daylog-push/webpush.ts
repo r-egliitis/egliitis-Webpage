@@ -79,6 +79,69 @@ export async function encryptPayload(
   return concat(salt, recordSize, new Uint8Array([asPublic.length]), asPublic, ciphertext);
 }
 
+/**
+ * Cleans pasted key values: whitespace/newlines, quotes, a leading "NAME=",
+ * and standard (+/) base64. Returns base64url without padding.
+ */
+export function cleanKey(raw: string, name: string): string {
+  return raw
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(new RegExp(`^${name}\\s*=\\s*`), "")
+    .replace(/\s+/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+/**
+ * Normalises and checks a VAPID key pair. Throws a message that says what is
+ * wrong (never the key itself): wrong length, swapped keys, or keys that
+ * don't belong together.
+ */
+export async function checkedVapidKeys(raw: VapidKeys): Promise<VapidKeys> {
+  const publicKey = cleanKey(raw.publicKey, "VAPID_PUBLIC_KEY");
+  const privateKey = cleanKey(raw.privateKey, "VAPID_PRIVATE_KEY");
+  let publicBytes: Uint8Array;
+  let privateBytes: Uint8Array;
+  try {
+    publicBytes = base64UrlDecode(publicKey);
+    privateBytes = base64UrlDecode(privateKey);
+  } catch {
+    throw new Error("VAPID keys aren't valid base64url. Re-paste them in Edge Function secrets.");
+  }
+  if (publicBytes.length === 32 && privateBytes.length === 65) {
+    throw new Error("VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY look swapped.");
+  }
+  if (publicBytes.length !== 65 || publicBytes[0] !== 4) {
+    throw new Error(`VAPID_PUBLIC_KEY should be 65 bytes (87 characters); got ${publicBytes.length} bytes.`);
+  }
+  if (privateBytes.length !== 32) {
+    throw new Error(`VAPID_PRIVATE_KEY should be 32 bytes (43 characters); got ${privateBytes.length} bytes.`);
+  }
+  const keys = { publicKey, privateKey, subject: raw.subject };
+
+  // Prove the pair matches: sign with the private key, verify with the public one.
+  let valid = false;
+  try {
+    const header = await vapidAuthorization("https://check.invalid/", keys);
+    const [, jwt] = header.match(/^vapid t=([^,]+),/) ?? [];
+    const [h, c, s] = jwt.split(".");
+    const verifyKey = await crypto.subtle.importKey(
+      "raw",
+      publicBytes as Uint8Array<ArrayBuffer>,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
+    valid = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, verifyKey, base64UrlDecode(s), encoder.encode(`${h}.${c}`));
+  } catch {
+    valid = false; // some runtimes reject a mismatched x/y/d at import time
+  }
+  if (!valid) throw new Error("VAPID_PRIVATE_KEY doesn't belong to VAPID_PUBLIC_KEY. Re-paste both from the same pair.");
+  return keys;
+}
+
 /** RFC 8292: the `Authorization: vapid t=..., k=...` header for an endpoint. */
 export async function vapidAuthorization(endpoint: string, vapid: VapidKeys, now = Date.now()): Promise<string> {
   const publicRaw = base64UrlDecode(vapid.publicKey); // 0x04 || x(32) || y(32)

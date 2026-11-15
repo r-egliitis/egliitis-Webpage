@@ -11,7 +11,7 @@
 // never leaves Supabase.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { sendPush, type VapidKeys } from "./webpush.ts";
+import { checkedVapidKeys, sendPush, type VapidKeys } from "./webpush.ts";
 
 type LogRow = {
   id: string;
@@ -49,12 +49,23 @@ Deno.serve(async (request) => {
   });
   if (authError || authorized !== true) return new Response("Unauthorized", { status: 401 });
 
-  const vapid: VapidKeys = {
-    publicKey: env("VAPID_PUBLIC_KEY"),
-    privateKey: env("VAPID_PRIVATE_KEY"),
-    // Contact for the push services (mailto: or https:).
-    subject: Deno.env.get("VAPID_SUBJECT") ?? "https://egliitis.id.lv",
-  };
+  // Cleaned and checked: a pasted secret with a stray space, prefix or the
+  // wrong key fails here with a clear message instead of on every push.
+  let vapid: VapidKeys;
+  try {
+    vapid = await checkedVapidKeys({
+      publicKey: env("VAPID_PUBLIC_KEY"),
+      privateKey: env("VAPID_PRIVATE_KEY"),
+      // Contact for the push services (mailto: or https:).
+      subject: Deno.env.get("VAPID_SUBJECT")?.trim() || "https://egliitis.id.lv",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("VAPID keys:", message);
+    // Leave the rows pending (they expire after 10 minutes) and say why.
+    return Response.json({ error: message }, { status: 500 });
+  }
+  console.log("VAPID public key starts", vapid.publicKey.slice(0, 8));
 
   // Atomic claim (for update skip locked): overlapping runs never take the same row.
   const { data: rows, error: claimError } = await db.rpc("daylog_claim_pending");
