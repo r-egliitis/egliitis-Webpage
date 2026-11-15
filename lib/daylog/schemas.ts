@@ -13,8 +13,9 @@ export const dayRef = z.object({ dayId: id });
 export const writeEntry = z.discriminatedUnion("kind", [
   // The opening entry is stamped with the server's time by the trigger.
   z.object({ kind: z.literal("opening"), id: id.optional(), dayId: id, body, tagIds }),
+  // A slot entry, or the one entry written for a paused block.
   z
-    .object({ kind: z.literal("slot"), id: id.optional(), dayId: id, startAt: instant, endAt: instant, body, tagIds })
+    .object({ kind: z.enum(["slot", "pause"]), id: id.optional(), dayId: id, startAt: instant, endAt: instant, body, tagIds })
     .refine((entry) => Date.parse(entry.endAt) > Date.parse(entry.startAt), "That time range is empty."),
 ]);
 

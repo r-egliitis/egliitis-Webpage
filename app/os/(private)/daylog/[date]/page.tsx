@@ -23,7 +23,7 @@ async function DayData({ params }: Pick<PageProps<"/os/daylog/[date]">, "params"
   const result = await getDaylogDay(date);
   if (!result) notFound();
 
-  const { day, entries, tags, serverNow } = result;
+  const { day, entries, pauses, tags, serverNow } = result;
   if (!day.started_at) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -39,5 +39,5 @@ async function DayData({ params }: Pick<PageProps<"/os/daylog/[date]">, "params"
       </div>
     );
   }
-  return <DayHistory day={day} entries={entries} tags={tags} serverNow={serverNow} />;
+  return <DayHistory day={day} entries={entries} pauses={pauses} tags={tags} serverNow={serverNow} />;
 }

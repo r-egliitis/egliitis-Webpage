@@ -7,7 +7,8 @@ import { EntrySheet } from "@/components/daylog/entry-sheet";
 import { EntryStack } from "@/components/daylog/entry-stack";
 import { Toast, type ToastMessage } from "@/components/os/toast";
 import { toDayShape } from "@/lib/daylog/map";
-import { buildTimeline, timelineCounts, type Slot, type TimelineEntry } from "@/lib/daylog/slots";
+import { buildTimeline, effectivePauseEnd, timelineCounts, type Slot, type TimelineEntry } from "@/lib/daylog/slots";
+import type { PauseRow } from "@/lib/daylog/map";
 import { durationLabel, formatTime } from "@/lib/daylog/time";
 import { useOptimisticEntries } from "@/lib/daylog/use-optimistic-entries";
 import { useDaylogTags } from "@/lib/daylog/use-tags";
@@ -17,15 +18,20 @@ import type { DaylogDay, DaylogTag } from "@/types/database";
 type DayHistoryProps = {
   day: DaylogDay;
   entries: TimelineEntry[];
+  pauses: PauseRow[];
   tags: DaylogTag[];
   serverNow: number;
 };
 
 // A past (or the running) day as one timeline. Gaps can still be filled in.
-export function DayHistory({ day, entries: serverEntries, tags: serverTags, serverNow }: DayHistoryProps) {
+export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tags: serverTags, serverNow }: DayHistoryProps) {
   const shape = useMemo(() => toDayShape(day)!, [day]);
   const { entries, run, error, clearError } = useOptimisticEntries(serverEntries);
-  const items = useMemo(() => buildTimeline(shape, entries, serverNow), [shape, entries, serverNow]);
+  const pauses = useMemo(
+    () => pauseRows.map((pause) => ({ id: pause.id, start: pause.start, end: effectivePauseEnd(pause, serverNow) })),
+    [pauseRows, serverNow],
+  );
+  const items = useMemo(() => buildTimeline(shape, entries, serverNow, pauses), [shape, entries, serverNow, pauses]);
   const counts = timelineCounts(items);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const showError = useCallback((text: string) => setToast({ id: Date.now(), text, tone: "error" }), []);
@@ -35,10 +41,10 @@ export function DayHistory({ day, entries: serverEntries, tags: serverTags, serv
   const live = day.status === "active";
   const taggingMode = day.settings_snapshot?.tagging_mode ?? "while_writing";
 
-  function fill(slot: Slot) {
+  function fill(slot: Slot, kind: "slot" | "pause" = "slot") {
     setEditing({
       isNew: true,
-      entry: { id: crypto.randomUUID(), kind: "slot", start: slot.start, end: slot.end, body: "", skipped: false, tagIds: [] },
+      entry: { id: crypto.randomUUID(), kind, start: slot.start, end: slot.end, body: "", skipped: false, tagIds: [] },
     });
   }
 
@@ -47,7 +53,7 @@ export function DayHistory({ day, entries: serverEntries, tags: serverTags, serv
       void run({ type: "add", entry: { ...entry, body, tagIds } }, async () => {
         await tagsReady(tagIds);
         return writeEntry({
-          kind: "slot",
+          kind: entry.kind === "pause" ? "pause" : "slot",
           id: entry.id,
           dayId: day.id,
           startAt: new Date(entry.start).toISOString(),

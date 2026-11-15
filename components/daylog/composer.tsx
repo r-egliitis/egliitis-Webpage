@@ -7,10 +7,11 @@ import type { DaylogTag } from "@/types/database";
 import type { Slot } from "@/lib/daylog/slots";
 import { rangeLabel } from "@/lib/daylog/time";
 
-export type ComposerSubmit = { start: number; end: number; body: string; tagIds: string[] };
+export type ComposerSubmit = { start: number; end: number; body: string; tagIds: string[]; kind: "slot" | "pause" };
 
 type ComposerProps = {
-  target: Slot;
+  /** kind "pause": the one entry for a paused block. */
+  target: Slot & { kind?: "slot" | "pause" };
   /** Empty slots right before the target, nearest first: one entry can cover them too. */
   earlier: Slot[];
   /** How many of `earlier` this entry also covers. */
@@ -59,7 +60,7 @@ export function Composer({
     event?.preventDefault();
     const text = body.trim();
     if (!text) return;
-    onSubmit({ start, end: target.end, body: text, tagIds });
+    onSubmit({ start, end: target.end, body: text, tagIds, kind: target.kind ?? "slot" });
     setBody("");
     setTagIds([]);
     setExtra(0);
@@ -70,7 +71,9 @@ export function Composer({
       <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-2">
         <p className="font-mono text-xs">
           <span className="text-fg">{label}</span>
-          <span className="text-muted">{backfilling ? " · filling in" : running ? " · in progress" : ""}</span>
+          <span className="text-muted">
+            {target.kind === "pause" ? " · while paused" : backfilling ? " · filling in" : running ? " · in progress" : ""}
+          </span>
         </p>
         <div className="flex items-center gap-2">
           {backfilling && (

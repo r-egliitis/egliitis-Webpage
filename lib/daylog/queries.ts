@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { toTimelineEntries } from "@/lib/daylog/map";
+import { toPauses, toTimelineEntries, type PauseRow } from "@/lib/daylog/map";
 import type { TimelineEntry } from "@/lib/daylog/slots";
 import { shiftMonth } from "@/lib/daylog/time";
 import { todayInRiga } from "@/lib/os/dates";
@@ -43,11 +43,22 @@ async function entriesFor(dayId: string): Promise<TimelineEntry[]> {
   return toTimelineEntries(entries, links);
 }
 
+async function pausesFor(dayId: string): Promise<PauseRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("daylog_pauses")
+    .select("id, started_at, ended_at, resume_at")
+    .eq("day_id", dayId)
+    .order("started_at");
+  if (error) throw error;
+  return toPauses(data);
+}
+
 export type DaylogHome = {
   today: string;
   serverNow: number;
-  /** The day being tracked right now, with its entries. */
-  active: { day: DaylogDay; entries: TimelineEntry[] } | null;
+  /** The day being tracked right now, with its entries and pauses. */
+  active: { day: DaylogDay; entries: TimelineEntry[]; pauses: PauseRow[] } | null;
   /** Today's row if it exists (scheduled, ended or missed). */
   todayDay: DaylogDay | null;
   /** Days in the visible month, plus every upcoming scheduled day. */
@@ -95,7 +106,9 @@ export async function getDaylogHome(month: string): Promise<DaylogHome> {
   return {
     today,
     serverNow: Date.now(),
-    active: activeDay ? { day: activeDay, entries: await entriesFor(activeDay.id) } : null,
+    active: activeDay
+      ? { day: activeDay, entries: await entriesFor(activeDay.id), pauses: await pausesFor(activeDay.id) }
+      : null,
     todayDay: todayRow,
     days: daysResult.data,
     recent: recentResult.data,
@@ -116,11 +129,11 @@ export async function getDaylogSettings(): Promise<DaylogSettings> {
 /** One day by date, with its entries, for the history view. */
 export async function getDaylogDay(
   day: string,
-): Promise<{ day: DaylogDay; entries: TimelineEntry[]; tags: DaylogTag[]; serverNow: number } | null> {
+): Promise<{ day: DaylogDay; entries: TimelineEntry[]; pauses: PauseRow[]; tags: DaylogTag[]; serverNow: number } | null> {
   const supabase = await db();
   const { data, error } = await supabase.from("daylog_days").select(DAY_COLUMNS).eq("day", day).maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const [entries, tags] = await Promise.all([entriesFor(data.id), getTags()]);
-  return { day: data, entries, tags, serverNow: Date.now() };
+  const [entries, pauses, tags] = await Promise.all([entriesFor(data.id), pausesFor(data.id), getTags()]);
+  return { day: data, entries, pauses, tags, serverNow: Date.now() };
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { deleteEntry, endDay, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
+import { deleteEntry, endDay, endPause, startPause, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
 import { Composer, type ComposerSubmit } from "@/components/daylog/composer";
 import { DaylogCalendar } from "@/components/daylog/daylog-calendar";
 import { EntrySheet } from "@/components/daylog/entry-sheet";
@@ -16,11 +16,17 @@ import {
   buildTimeline,
   composerSlot,
   earlierEmptySlots,
+  effectivePauseEnd,
+  openPause,
   slotFromParam,
   timelineCounts,
+  unwrittenPause,
   type Slot,
   type TimelineEntry,
 } from "@/lib/daylog/slots";
+
+/** What the composer writes: a slot range, or the block of a pause. */
+type Target = Slot & { kind?: "slot" | "pause" };
 import { useDaylogTags } from "@/lib/daylog/use-tags";
 import { formatTime } from "@/lib/daylog/time";
 import { useClock } from "@/lib/daylog/use-clock";
@@ -44,21 +50,42 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
   const shape = useMemo(() => toDayShape(day)!, [day]);
   const now = useClock(data.serverNow);
   const { entries, run, error, clearError } = useOptimisticEntries(data.active.entries);
-  const items = useMemo(() => buildTimeline(shape, entries, now), [shape, entries, now]);
-  const [picked, setPicked] = useState<Slot | null>(() => slotFromParam(items, slotParam));
+  // A timer pause counts as ended once its time is up (the server closes it within a minute).
+  const pauses = useMemo(
+    () => data.active.pauses.map((pause) => ({ id: pause.id, start: pause.start, end: effectivePauseEnd(pause, now) })),
+    [data.active.pauses, now],
+  );
+  const items = useMemo(() => buildTimeline(shape, entries, now, pauses), [shape, entries, now, pauses]);
+  const [picked, setPicked] = useState<Target | null>(() => slotFromParam(items, slotParam));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // A picked gap that has since been filled falls back to the latest slot.
-  const pickedStillEmpty = picked && items.some((item) => (item.type === "empty" || item.type === "current") && item.slot.start === picked.start);
-  const target = (pickedStillEmpty ? picked : null) ?? composerSlot(items, false);
-  const backfilling = Boolean(pickedStillEmpty && picked && target && picked.start !== composerSlot(items, false)?.start);
+  const runningPause = openPause(items);
+  const pausedBlock = unwrittenPause(items);
+  const pauseMode = day.settings_snapshot?.pause_mode ?? "button";
+  const pauseRow = runningPause ? data.active.pauses.find((pause) => pause.id === runningPause.pauseId) : null;
+
+  // A picked gap (or paused block) that has since been filled falls back to the default target.
+  const pickedStillOpen =
+    picked &&
+    items.some(
+      (item) => (item.type === "empty" || item.type === "current" || (item.type === "paused" && !item.open)) && item.slot.start === picked.start,
+    );
+  // While paused: no composer. After a pause: write the paused block first. Otherwise the latest slot.
+  const defaultTarget: Target | null = runningPause
+    ? null
+    : pausedBlock
+      ? { ...pausedBlock.slot, kind: "pause" }
+      : composerSlot(items, false);
+  const target = runningPause ? null : ((pickedStillOpen ? picked : null) ?? defaultTarget);
+  const backfilling = Boolean(pickedStillOpen && picked && target && picked.start !== defaultTarget?.start);
   // Multi-slot: earlier empty slots the entry also covers (hidden from the stack meanwhile).
   const [extend, setExtend] = useState<{ target: number; extra: number }>({ target: 0, extra: 0 });
-  const earlier = target && day.settings_snapshot?.multi_slot_entries !== false ? earlierEmptySlots(items, target) : [];
+  const earlier =
+    target && target.kind !== "pause" && day.settings_snapshot?.multi_slot_entries !== false ? earlierEmptySlots(items, target) : [];
   const extra = target && extend.target === target.start ? Math.min(extend.extra, earlier.length) : 0;
   const composerStart = extra > 0 ? earlier[extra - 1].start : target?.start;
   const counts = timelineCounts(items);
@@ -91,12 +118,12 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
       void run(
         {
           type: "add",
-          entry: { id, kind: "slot", start: entry.start, end: entry.end, body: entry.body, skipped: false, tagIds: entry.tagIds },
+          entry: { id, kind: entry.kind, start: entry.start, end: entry.end, body: entry.body, skipped: false, tagIds: entry.tagIds },
         },
         async () => {
           await tagsReady(entry.tagIds);
           return writeEntry({
-            kind: "slot",
+            kind: entry.kind,
             id,
             dayId: day.id,
             startAt: new Date(entry.start).toISOString(),
@@ -135,9 +162,26 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
     void run({ type: "remove", id: entry.id }, () => deleteEntry(entry.id));
   }
 
-  function fill(slot: Slot) {
-    setPicked(slot);
+  function fill(slot: Slot, kind: "slot" | "pause" = "slot") {
+    setPicked({ ...slot, kind });
     inputRef.current?.focus();
+  }
+
+  const [pausing, startPausing] = useTransition();
+  function pause() {
+    startPausing(async () => {
+      const minutes = pauseMode === "timer" ? (day.settings_snapshot?.pause_timer_minutes ?? 90) : null;
+      const result = await startPause(day.id, minutes);
+      if (!result.ok) showError(result.error);
+    });
+  }
+  function resume() {
+    if (!runningPause) return;
+    startPausing(async () => {
+      const result = await endPause(runningPause.pauseId);
+      if (!result.ok) showError(result.error);
+      else requestAnimationFrame(() => inputRef.current?.focus());
+    });
   }
 
   const errorToast: ToastMessage | null = error ? { id: 0, text: error, tone: "error" } : null;
@@ -169,6 +213,11 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
           <Link href="/os/daylog/setup" className={secondaryClass}>
             Setup
           </Link>
+          {pauseMode !== "off" && !runningPause && (
+            <button type="button" onClick={pause} disabled={pausing} className={secondaryClass}>
+              {pauseMode === "timer" ? `Pause ${day.settings_snapshot?.pause_timer_minutes ?? 90} min` : "Pause"}
+            </button>
+          )}
           <button
             type="button"
             onClick={endTheDay}
@@ -191,6 +240,29 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
         />
       </div>
       <div ref={bottomRef} />
+
+      {runningPause && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 px-3 pb-2 md:sticky md:inset-x-auto md:bottom-0 md:mt-6 md:px-0 md:pb-6">
+          <div
+            role="status"
+            className="mx-auto flex max-w-2xl items-center justify-between gap-3 rounded-3xl border border-line bg-surface/95 p-3 pl-5 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-md"
+          >
+            <p className="text-sm">
+              Paused since {formatTime(runningPause.pausedAt)}
+              {pauseRow?.resumeAt && <span className="text-muted"> · resumes {formatTime(pauseRow.resumeAt)}</span>}
+              <span className="block text-xs text-muted">No pings until you resume.</span>
+            </p>
+            <button
+              type="button"
+              onClick={resume}
+              disabled={pausing}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-fg px-5 text-sm font-medium text-surface transition-opacity disabled:opacity-50"
+            >
+              {pausing ? "Resuming…" : "Resume"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {target && (
         // Phone: pinned above the tab bar. Desktop: sticks to the bottom of the column.

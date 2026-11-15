@@ -1,6 +1,6 @@
 import type { DayShape, TimelineEntry } from "@/lib/daylog/slots";
 import { toMs } from "@/lib/daylog/time";
-import type { DaylogDay, DaylogEntry, DaylogEntryTag } from "@/types/database";
+import type { DaylogDay, DaylogEntry, DaylogEntryTag, DaylogPause } from "@/types/database";
 
 // Database rows → the shapes lib/daylog/slots.ts works with.
 
@@ -33,5 +33,18 @@ export function toDayShape(day: DaylogDay): DayShape | null {
     endedAt: day.ended_at ? toMs(day.ended_at) : null,
     windowEnd: toMs(day.window_end),
     intervalMinutes: day.settings_snapshot?.interval_minutes ?? 20,
+    missedSlotMode: day.settings_snapshot?.missed_slot_mode ?? "backfill",
+    lockAfterSlots: day.settings_snapshot?.lock_after_slots ?? 3,
   };
+}
+
+export type PauseRow = { id: string; start: number; end: number | null; resumeAt: number | null };
+
+export function toPauses(rows: Pick<DaylogPause, "id" | "started_at" | "ended_at" | "resume_at">[]): PauseRow[] {
+  return rows.map((row) => ({
+    id: row.id,
+    start: toMs(row.started_at),
+    end: row.ended_at ? toMs(row.ended_at) : null,
+    resumeAt: row.resume_at ? toMs(row.resume_at) : null,
+  }));
 }

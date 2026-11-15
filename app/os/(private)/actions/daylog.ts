@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import {
   createTag as createTagSchema,
   daylogSettings as daylogSettingsSchema,
+  pauseRef as pauseRefSchema,
+  pauseStart as pauseStartSchema,
   updateTag as updateTagSchema,
   dayRef,
   entryRef,
@@ -31,6 +33,7 @@ const ERRORS = {
   daylog_entries_no_overlap: "That time overlaps something you already wrote.",
   daylog_entries_one_opening_idx: "This day has already started.",
   daylog_tags_user_name_idx: "You already have a tag with that name.",
+  daylog_pauses_no_overlap: "You're already paused.",
 };
 
 function done(): ActionResult {
@@ -102,7 +105,7 @@ export async function writeEntry(input: WriteEntryInput): Promise<ActionResult> 
     entry.kind === "opening"
       ? // start/end are overwritten by the trigger with the server's time.
         { id, day_id: entry.dayId, kind: "opening", start_at: new Date().toISOString(), end_at: new Date().toISOString(), body: entry.body }
-      : { id, day_id: entry.dayId, kind: "slot", start_at: entry.startAt, end_at: entry.endAt, body: entry.body },
+      : { id, day_id: entry.dayId, kind: entry.kind, start_at: entry.startAt, end_at: entry.endAt, body: entry.body },
   );
   if (error) return failed("writeEntry", error);
 
@@ -207,6 +210,37 @@ export async function sendTestPush(): Promise<ActionResult> {
     };
   }
   return { ok: true };
+}
+
+/** Pauses the running day now; with `minutes` it resumes on its own (timer). */
+export async function startPause(dayId: string, minutes: number | null): Promise<ActionResult> {
+  const parsed = pauseStartSchema.safeParse({ dayId, minutes });
+  if (!parsed.success) return { ok: false, error: "That pause isn't valid." };
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+
+  const now = Date.now();
+  const { error } = await session.supabase.from("daylog_pauses").insert({
+    day_id: parsed.data.dayId,
+    started_at: new Date(now).toISOString(),
+    resume_at: parsed.data.minutes ? new Date(now + parsed.data.minutes * 60_000).toISOString() : null,
+  });
+  return error ? failed("startPause", error) : done();
+}
+
+/** Resumes: ends the open pause now. The composer then asks for the paused block. */
+export async function endPause(pauseId: string): Promise<ActionResult> {
+  const parsed = pauseRefSchema.safeParse({ pauseId });
+  if (!parsed.success) return { ok: false, error: "That pause doesn't exist." };
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+
+  const { error } = await session.supabase
+    .from("daylog_pauses")
+    .update({ ended_at: new Date().toISOString() })
+    .eq("id", parsed.data.pauseId)
+    .is("ended_at", null);
+  return error ? failed("endPause", error) : done();
 }
 
 /** Saves your settings. They apply from the next day you start. */

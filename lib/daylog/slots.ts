@@ -18,11 +18,16 @@ export type TimelineEntry = {
   tagIds: string[];
 };
 
+export type Pause = { id: string; start: number; end: number | null };
+
 export type TimelineItem =
   | { type: "opening"; entry: TimelineEntry }
   | { type: "entry"; entry: TimelineEntry }
-  | { type: "empty"; slot: Slot } // ended, nothing written: tap to backfill
-  | { type: "current"; slot: Slot }; // still running, nothing written yet
+  // Ended, nothing written: tap to backfill. `locked` = too old to fill in (lock/skip modes).
+  | { type: "empty"; slot: Slot; locked?: boolean }
+  | { type: "current"; slot: Slot } // still running, nothing written yet
+  // Unwritten slots that overlap one pause, merged. `open` = the pause is still running.
+  | { type: "paused"; pauseId: string; slot: Slot; open: boolean; pausedAt: number };
 
 export type DayShape = {
   startedAt: number;
@@ -30,6 +35,9 @@ export type DayShape = {
   endedAt: number | null;
   windowEnd: number;
   intervalMinutes: number;
+  /** Missed-slot mode from the day's settings snapshot (default: backfill). */
+  missedSlotMode?: "backfill" | "lock" | "skip";
+  lockAfterSlots?: number;
 };
 
 export function stepMs(intervalMinutes: number): number {
@@ -58,8 +66,23 @@ export function daySlots(day: DayShape, now: number): Slot[] {
 
 const overlaps = (entry: TimelineEntry, slot: Slot) => entry.start < slot.end && entry.end > slot.start;
 
-/** The ordered stack: opening entry, then entries and empty slots by time. */
-export function buildTimeline(day: DayShape, entries: TimelineEntry[], now: number): TimelineItem[] {
+/** A pause that is open, or ended by its timer, as of `now`. */
+export function effectivePauseEnd(pause: Pause & { resumeAt?: number | null }, now: number): number | null {
+  if (pause.end !== null) return pause.end;
+  if (pause.resumeAt != null && pause.resumeAt <= now) return pause.resumeAt; // the tick will close it
+  return null;
+}
+
+/** Whether an empty slot is too old to fill in, per the day's missed-slot mode. */
+export function isLocked(day: DayShape, slot: Slot, now: number): boolean {
+  const step = stepMs(day.intervalMinutes);
+  if (day.missedSlotMode === "lock") return now >= slot.end + (day.lockAfterSlots ?? 3) * step;
+  if (day.missedSlotMode === "skip") return now >= slot.end + step;
+  return false;
+}
+
+/** The ordered stack: opening entry, then entries, pauses and empty slots by time. */
+export function buildTimeline(day: DayShape, entries: TimelineEntry[], now: number, pauses: Pause[] = []): TimelineItem[] {
   const opening = entries.find((entry) => entry.kind === "opening");
   const ranged = entries.filter((entry) => entry.kind !== "opening").sort((a, b) => a.start - b.start);
   const items: TimelineItem[] = opening ? [{ type: "opening", entry: opening }] : [];
@@ -75,8 +98,15 @@ export function buildTimeline(day: DayShape, entries: TimelineEntry[], now: numb
       }
       continue;
     }
+    const pause = pauses.find((candidate) => candidate.start < slot.end && (candidate.end ?? Infinity) > slot.start);
+    if (pause) {
+      const last = items.at(-1);
+      if (last?.type === "paused" && last.pauseId === pause.id) last.slot = { start: last.slot.start, end: slot.end };
+      else items.push({ type: "paused", pauseId: pause.id, slot: { ...slot }, open: pause.end === null, pausedAt: pause.start });
+      continue;
+    }
     const running = day.endedAt === null && slot.end > now;
-    items.push(running ? { type: "current", slot } : { type: "empty", slot });
+    items.push(running ? { type: "current", slot } : { type: "empty", slot, locked: isLocked(day, slot, now) });
   }
 
   // Anything outside the slot range (shouldn't happen) still shows, in order.
@@ -97,12 +127,24 @@ export function composerSlot(items: TimelineItem[], ended: boolean): Slot | null
     if (item.type === "current") {
       // Prefer an ended gap right before the running slot.
       const previous = items[i - 1];
-      return previous?.type === "empty" ? previous.slot : item.slot;
+      return previous?.type === "empty" && !previous.locked ? previous.slot : item.slot;
     }
-    if (item.type === "empty") return item.slot;
-    if (item.type === "entry" || item.type === "opening") return null;
+    if (item.type === "empty") return item.locked ? null : item.slot;
+    if (item.type === "entry" || item.type === "opening" || item.type === "paused") return null;
   }
   return null;
+}
+
+/** The pause running right now, if any. */
+export function openPause(items: TimelineItem[]): Extract<TimelineItem, { type: "paused" }> | null {
+  const item = items.findLast((candidate) => candidate.type === "paused" && candidate.open);
+  return item?.type === "paused" ? item : null;
+}
+
+/** The most recent ended pause with nothing written for it yet: the resume entry's range. */
+export function unwrittenPause(items: TimelineItem[]): Extract<TimelineItem, { type: "paused" }> | null {
+  const item = items.findLast((candidate) => candidate.type === "paused" && !candidate.open);
+  return item?.type === "paused" ? item : null;
 }
 
 /**
@@ -116,7 +158,7 @@ export function earlierEmptySlots(items: TimelineItem[], target: Slot): Slot[] {
   const result: Slot[] = [];
   for (let i = index - 1; i >= 0; i--) {
     const item = items[i];
-    if (item.type !== "empty") break;
+    if (item.type !== "empty" || item.locked) break;
     result.push(item.slot);
   }
   return result;
@@ -133,13 +175,17 @@ export function slotFromParam(items: TimelineItem[], param: string | null): Slot
   return null;
 }
 
-/** Counts for headers and stats. */
+/** Counts for headers and stats. `empty` = gaps you can still fill in. */
 export function timelineCounts(items: TimelineItem[]) {
   let filled = 0;
   let empty = 0;
+  let locked = 0;
   for (const item of items) {
     if (item.type === "entry") filled++;
-    if (item.type === "empty") empty++;
+    if (item.type === "empty") {
+      if (item.locked) locked++;
+      else empty++;
+    }
   }
-  return { filled, empty };
+  return { filled, empty, locked };
 }
