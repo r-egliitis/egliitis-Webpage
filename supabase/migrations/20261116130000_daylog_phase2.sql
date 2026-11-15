@@ -1,13 +1,17 @@
 -- Day Log phase 2: pauses, quiet mode, missed-slot lock/skip, settings that
 -- take effect when a day starts. Replaces three functions from
 -- 20261116120000_daylog_schema.sql; no table changes.
+-- Also fixes: the first slot of a day was rejected because started_at had
+-- microseconds and the browser sends milliseconds.
 
 -- ─────────────────────────── entry rules ────────────────────────────
 create or replace function public.daylog_entries_before_write()
 returns trigger language plpgsql set search_path = '' as $$
 declare
   v_day      public.daylog_days%rowtype;
-  v_now      timestamptz := now();
+  -- Milliseconds, not microseconds: browsers only have ms, and a first slot
+  -- starting 0.7 ms "before" the day would be rejected.
+  v_now      timestamptz := date_trunc('milliseconds', now());
   v_settings jsonb;
   v_step     int;
   v_open_end timestamptz;
@@ -51,7 +55,8 @@ begin
     v_open_end := coalesce(
       v_day.ended_at,
       least(v_day.window_end, to_timestamp((floor(extract(epoch from v_now) / v_step) + 1) * v_step)));
-    if new.start_at < v_day.started_at or new.end_at > v_open_end then
+    -- Compare at millisecond precision (days started before this fix have µs).
+    if new.start_at < date_trunc('milliseconds', v_day.started_at) or new.end_at > v_open_end then
       raise exception 'That time is outside this day.' using errcode = 'check_violation';
     end if;
 
