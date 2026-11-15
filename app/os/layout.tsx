@@ -8,11 +8,19 @@ export const metadata: Metadata = {
     nocache: true,
     googleBot: { index: false, follow: false },
   },
+  // Installable as the "Day Log" app (scope /os/). Declared here, not at the
+  // root, so the public site doesn't become installable.
+  manifest: "/daylog.webmanifest",
+  appleWebApp: { capable: true, title: "Day Log", statusBarStyle: "black-translucent" },
 };
 
 // Lets the phone tab bar sit above the home indicator (safe-area insets).
 export const viewport: Viewport = {
   viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#2e2c2b" },
+    { media: "(prefers-color-scheme: light)", color: "#f0eee9" },
+  ],
 };
 
 export default function OsLayout({ children }: LayoutProps<"/os">) {

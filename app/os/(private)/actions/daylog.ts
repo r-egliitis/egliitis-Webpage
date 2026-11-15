@@ -5,10 +5,12 @@ import {
   createTag as createTagSchema,
   dayRef,
   entryRef,
+  pushSubscription as pushSubscriptionSchema,
   scheduleDay as scheduleDaySchema,
   updateEntry as updateEntrySchema,
   writeEntry as writeEntrySchema,
   type CreateTagInput,
+  type PushSubscriptionInput,
   type UpdateEntryInput,
   type WriteEntryInput,
 } from "@/lib/daylog/schemas";
@@ -160,6 +162,47 @@ export async function endDay(dayId: string): Promise<ActionResult> {
     .eq("id", parsed.data.dayId)
     .eq("status", "active");
   return error ? failed("endDay", error) : done();
+}
+
+/** Saves (or refreshes) this device's push subscription. */
+export async function savePushSubscription(input: PushSubscriptionInput): Promise<ActionResult> {
+  const parsed = pushSubscriptionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "That push subscription isn't valid." };
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+
+  const { endpoint, keys, userAgent } = parsed.data;
+  const { error } = await session.supabase.from("push_subscriptions").upsert(
+    { endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: userAgent ?? null, fail_count: 0, last_error: null },
+    { onConflict: "endpoint" },
+  );
+  if (error) {
+    console.error("savePushSubscription", error);
+    return { ok: false, error: "Couldn't save this device for notifications." };
+  }
+  return { ok: true };
+}
+
+export async function deletePushSubscription(endpoint: string): Promise<ActionResult> {
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+  const { error } = await session.supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+  return error ? failed("deletePushSubscription", error) : { ok: true };
+}
+
+/** Queues a test notification; the scheduler sends it within seconds. */
+export async function sendTestPush(): Promise<ActionResult> {
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+  const { error } = await session.supabase.rpc("daylog_request_test_push");
+  if (error) {
+    console.error("sendTestPush", error);
+    return {
+      ok: false,
+      error: error.code === "PGRST202" ? "Push isn't set up on the server yet (cron migration not applied)." : "Couldn't send a test.",
+    };
+  }
+  return { ok: true };
 }
 
 export async function createTag(input: CreateTagInput): Promise<ActionResult> {

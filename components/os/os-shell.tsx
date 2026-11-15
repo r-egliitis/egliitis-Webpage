@@ -3,10 +3,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { OsSidebarNav, OsTabBar } from "@/components/os/os-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SwRegister } from "@/components/daylog/sw-register";
 
 function OsLogo() {
   return (
-    <Link href="/" className="flex items-center gap-2" aria-label="egliitis home">
+    // /os, not /: inside the installed app, / would leave its scope.
+    <Link href="/os" className="flex items-center gap-2" aria-label="egliitis OS home">
       <Image src="/joker.png" alt="" width={22} height={22} />
       <span className="font-bold tracking-tight">egliitis</span>
       <span className="font-mono text-xs text-muted">/os</span>
@@ -29,7 +31,8 @@ export function OsShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-line bg-surface/80 px-5 backdrop-blur-md md:hidden">
+        {/* Safe-area padding: the installed app draws under the iPhone status bar. */}
+        <div className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center justify-between border-b border-line bg-surface/80 px-5 pt-[env(safe-area-inset-top)] backdrop-blur-md md:hidden">
           <OsLogo />
           <ThemeToggle />
         </div>
@@ -39,6 +42,7 @@ export function OsShell({ children }: { children: ReactNode }) {
       </div>
 
       <OsTabBar />
+      <SwRegister />
     </div>
   );
 }

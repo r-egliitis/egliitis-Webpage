@@ -7,7 +7,7 @@ import { LoginForm } from "./login-form";
 export default function LoginPage() {
   return (
     <>
-      <Container className="flex h-16 items-center justify-between">
+      <Container className="flex h-[calc(4rem+env(safe-area-inset-top))] items-center justify-between pt-[env(safe-area-inset-top)]">
         <Link href="/" className="flex items-center gap-2" aria-label="egliitis home">
           <Image src="/joker.png" alt="" width={22} height={22} />
           <span className="font-bold tracking-tight">egliitis</span>
