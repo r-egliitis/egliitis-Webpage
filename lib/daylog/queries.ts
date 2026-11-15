@@ -1,11 +1,12 @@
 import "server-only";
 
 import { cache } from "react";
-import { toPauses, toTimelineEntries, type PauseRow } from "@/lib/daylog/map";
-import type { TimelineEntry } from "@/lib/daylog/slots";
+import { toDayShape, toPauses, toTimelineEntries, type PauseRow } from "@/lib/daylog/map";
+import { buildTimeline, effectivePauseEnd, type TimelineEntry } from "@/lib/daylog/slots";
 import { toTsQuery } from "@/lib/daylog/search";
+import { dayStats, type DayStats } from "@/lib/daylog/stats";
 import { shiftMonth } from "@/lib/daylog/time";
-import { todayInRiga } from "@/lib/os/dates";
+import { addDays, todayInRiga } from "@/lib/os/dates";
 import { createClient, getUser } from "@/lib/supabase/server";
 import type { DaylogDay, DaylogSettings, DaylogTag } from "@/types/database";
 
@@ -147,6 +148,56 @@ export async function getDaylogHome(month: string): Promise<DaylogHome> {
     recent: recentResult.data,
     tags,
   };
+}
+
+export type CompareDay = { day: string; stats: DayStats };
+
+/**
+ * Every tracked day (ended or running) in the last `rangeDays` days, oldest
+ * first, with its stats. Three queries in total, whatever the range.
+ */
+export async function getCompareData(rangeDays: number): Promise<{ days: CompareDay[]; tags: DaylogTag[]; today: string }> {
+  const supabase = await db();
+  const today = todayInRiga();
+  const since = addDays(today, -(rangeDays - 1));
+  const now = Date.now();
+
+  const { data: dayRows, error } = await supabase
+    .from("daylog_days")
+    .select(DAY_COLUMNS)
+    .in("status", ["ended", "active"])
+    .gte("day", since)
+    .order("day");
+  if (error) throw error;
+  const ids = dayRows.map((day) => day.id);
+  if (ids.length === 0) return { days: [], tags: await getTags(), today };
+
+  const [entryResult, pauseResult, tags] = await Promise.all([
+    supabase.from("daylog_entries").select("day_id, id, kind, start_at, end_at, body, skipped").in("day_id", ids),
+    supabase.from("daylog_pauses").select("id, day_id, started_at, ended_at, resume_at").in("day_id", ids),
+    getTags(),
+  ]);
+  if (entryResult.error) throw entryResult.error;
+  if (pauseResult.error) throw pauseResult.error;
+  const entryIds = entryResult.data.map((entry) => entry.id);
+  const { data: links, error: linkError } = entryIds.length
+    ? await supabase.from("daylog_entry_tags").select("entry_id, tag_id").in("entry_id", entryIds)
+    : { data: [], error: null };
+  if (linkError) throw linkError;
+
+  const days = dayRows.flatMap((day) => {
+    const shape = toDayShape(day);
+    if (!shape) return [];
+    const entries = toTimelineEntries(entryResult.data.filter((entry) => entry.day_id === day.id), links);
+    const pauses = toPauses(pauseResult.data.filter((pause) => pause.day_id === day.id)).map((pause) => ({
+      id: pause.id,
+      start: pause.start,
+      end: effectivePauseEnd(pause, now),
+    }));
+    const items = buildTimeline(shape, entries, now, pauses);
+    return [{ day: day.day, stats: dayStats(shape, items, pauses, now) }];
+  });
+  return { days, tags, today };
 }
 
 export type SearchResult = {

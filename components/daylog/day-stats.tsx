@@ -45,10 +45,8 @@ export function DayStatsView({ stats, tags }: { stats: DayStats; tags: Pick<Dayl
                     <span className="truncate">{name}</span>
                   </span>
                   <span aria-hidden className="h-2 overflow-hidden rounded-full bg-fg/[0.06]">
-                    <span
-                      className="block h-full rounded-full"
-                      style={{ width: `${(ms / longest) * 100}%`, backgroundColor: tag?.color ?? "var(--muted)" }}
-                    />
+                    {/* Ink, not the tag colour: several tag colours are too light to read as bars; the dot carries identity. */}
+                    <span className="block h-full rounded-full bg-fg/70" style={{ width: `${(ms / longest) * 100}%` }} />
                   </span>
                   <span className="font-mono text-xs text-muted">{durationLabel(ms)}</span>
                 </li>
