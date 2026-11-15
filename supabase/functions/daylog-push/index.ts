@@ -63,6 +63,12 @@ Deno.serve(async (request) => {
     return new Response("Claim failed", { status: 500 });
   }
 
+  // Writes a claimed row's outcome; a failure here would leave it stuck in "sending", so log it.
+  const record = async (id: string, fields: Record<string, unknown>) => {
+    const { error } = await db.from("notification_log").update(fields).eq("id", id);
+    if (error) console.error("updating notification_log failed", error);
+  };
+
   let sent = 0;
   for (const row of (rows ?? []) as LogRow[]) {
     const { data: subscriptions, error: subError } = await db
@@ -70,11 +76,9 @@ Deno.serve(async (request) => {
       .select("id, endpoint, p256dh, auth, fail_count")
       .eq("user_id", row.user_id);
 
+    if (subError) console.error("reading push_subscriptions failed", subError);
     if (subError || !subscriptions?.length) {
-      await db
-        .from("notification_log")
-        .update({ status: "failed", error: subError?.message ?? "no push subscription" })
-        .eq("id", row.id);
+      await record(row.id, { status: "failed", error: subError?.message ?? "no push subscription" });
       continue;
     }
 
@@ -111,15 +115,12 @@ Deno.serve(async (request) => {
     }
 
     if (anyOk) sent++;
-    await db
-      .from("notification_log")
-      .update({
-        // Not delivered yet: back to pending for the next minute, up to MAX_ATTEMPTS.
-        status: anyOk ? "sent" : row.attempts >= MAX_ATTEMPTS ? "failed" : "pending",
-        sent_at: anyOk ? new Date().toISOString() : null,
-        error: errors.length ? errors.join("; ").slice(0, 500) : null,
-      })
-      .eq("id", row.id);
+    await record(row.id, {
+      // Not delivered yet: back to pending for the next minute, up to MAX_ATTEMPTS.
+      status: anyOk ? "sent" : row.attempts >= MAX_ATTEMPTS ? "failed" : "pending",
+      sent_at: anyOk ? new Date().toISOString() : null,
+      error: errors.length ? errors.join("; ").slice(0, 500) : null,
+    });
   }
 
   return Response.json({ claimed: rows?.length ?? 0, sent });
