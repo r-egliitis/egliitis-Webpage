@@ -9,8 +9,8 @@ import type { DaylogTag } from "@/types/database";
 type EntryStackProps = {
   items: TimelineItem[];
   tags: DaylogTag[];
-  /** The slot currently in the composer; hidden from the stack. */
-  composerTarget: Slot | null;
+  /** The time the composer is writing (one or more slots); hidden from the stack. */
+  composerRange: Slot | null;
   onFill?: (slot: Slot) => void;
   onOpen?: (entry: TimelineEntry) => void;
 };
@@ -20,7 +20,7 @@ function TimeLabel({ children }: { children: string }) {
 }
 
 // Chat-like stack: oldest at the top, newest just above the composer.
-export function EntryStack({ items, tags, composerTarget, onFill, onOpen }: EntryStackProps) {
+export function EntryStack({ items, tags, composerRange, onFill, onOpen }: EntryStackProps) {
   const tagById = new Map(tags.map((tag) => [tag.id, tag]));
 
   return (
@@ -28,7 +28,7 @@ export function EntryStack({ items, tags, composerTarget, onFill, onOpen }: Entr
       {items.map((item) => {
         if (item.type === "current") return null;
         if (item.type === "empty") {
-          if (composerTarget && item.slot.start === composerTarget.start) return null;
+          if (composerRange && item.slot.start >= composerRange.start && item.slot.end <= composerRange.end) return null;
           return (
             <li key={`slot-${item.slot.start}`}>
               <TimeLabel>{rangeLabel(item.slot.start, item.slot.end)}</TimeLabel>

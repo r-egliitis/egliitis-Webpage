@@ -11,7 +11,7 @@ import { Sheet, SheetHeader } from "@/components/os/sheet";
 import { Toast, type ToastMessage } from "@/components/os/toast";
 import { toDayShape } from "@/lib/daylog/map";
 import type { DaylogHome } from "@/lib/daylog/queries";
-import { buildTimeline, composerSlot, slotFromParam, timelineCounts, type Slot } from "@/lib/daylog/slots";
+import { buildTimeline, composerSlot, earlierEmptySlots, slotFromParam, timelineCounts, type Slot } from "@/lib/daylog/slots";
 import { formatTime } from "@/lib/daylog/time";
 import { useClock } from "@/lib/daylog/use-clock";
 import { useOptimisticEntries } from "@/lib/daylog/use-optimistic-entries";
@@ -45,6 +45,11 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
   const pickedStillEmpty = picked && items.some((item) => (item.type === "empty" || item.type === "current") && item.slot.start === picked.start);
   const target = (pickedStillEmpty ? picked : null) ?? composerSlot(items, false);
   const backfilling = Boolean(pickedStillEmpty && picked && target && picked.start !== composerSlot(items, false)?.start);
+  // Multi-slot: earlier empty slots the entry also covers (hidden from the stack meanwhile).
+  const [extend, setExtend] = useState<{ target: number; extra: number }>({ target: 0, extra: 0 });
+  const earlier = target && day.settings_snapshot?.multi_slot_entries !== false ? earlierEmptySlots(items, target) : [];
+  const extra = target && extend.target === target.start ? Math.min(extend.extra, earlier.length) : 0;
+  const composerStart = extra > 0 ? earlier[extra - 1].start : target?.start;
   const counts = timelineCounts(items);
 
   // Keep both devices in sync: refresh when the tab comes back and every minute.
@@ -124,7 +129,12 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
       </header>
 
       <div className="mt-8">
-        <EntryStack items={items} tags={data.tags} composerTarget={target} onFill={fill} />
+        <EntryStack
+          items={items}
+          tags={data.tags}
+          composerRange={target && composerStart !== undefined ? { start: composerStart, end: target.end } : null}
+          onFill={fill}
+        />
       </div>
       <div ref={bottomRef} />
 
@@ -135,6 +145,9 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
             <Composer
               key={target.start}
               target={target}
+              earlier={earlier}
+              extra={extra}
+              onExtraChange={(value) => setExtend({ target: target.start, extra: value })}
               backfilling={backfilling}
               now={now}
               onSubmit={submit}
