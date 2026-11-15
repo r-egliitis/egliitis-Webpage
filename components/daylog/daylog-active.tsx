@@ -209,6 +209,12 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
           <Link href={`/os/daylog/${day.day}`} className={secondaryClass}>
             History
           </Link>
+          <Link href="/os/daylog/search" className={secondaryClass}>
+            Search
+          </Link>
+          <Link href="/os/daylog/compare" className={secondaryClass}>
+            Compare
+          </Link>
           <Link href="/os/daylog/settings" className={secondaryClass}>
             Settings
           </Link>
