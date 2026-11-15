@@ -4,8 +4,9 @@
 // pending. All timing decisions were already made in SQL (daylog_tick); this
 // only claims pending rows, sends them and records the outcome.
 //
-// Deploy: npx supabase functions deploy daylog-push --no-verify-jwt
-// Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, DAYLOG_CRON_SECRET
+// Deploy with JWT verification off; the caller is checked against the
+// daylog_cron_secret in Vault (public.daylog_verify_dispatch_secret).
+// Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (VAPID_SUBJECT optional).
 // The Supabase secret key is injected by Supabase (SUPABASE_SECRET_KEYS); it
 // never leaves Supabase.
 
@@ -37,27 +38,23 @@ function secretKey(): string {
   return env("SUPABASE_SERVICE_ROLE_KEY"); // older projects
 }
 
-/** Constant-time comparison for the shared cron secret. */
-function safeEqual(a: string, b: string): boolean {
-  const left = new TextEncoder().encode(a);
-  const right = new TextEncoder().encode(b);
-  let diff = left.length ^ right.length;
-  for (let i = 0; i < Math.max(left.length, right.length); i++) diff |= (left[i] ?? 0) ^ (right[i] ?? 0);
-  return diff === 0;
-}
-
 Deno.serve(async (request) => {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-  if (!safeEqual(request.headers.get("x-daylog-secret") ?? "", env("DAYLOG_CRON_SECRET"))) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+
+  const db = createClient(env("SUPABASE_URL"), secretKey(), { auth: { persistSession: false } });
+
+  // Only daylog_dispatch() knows the secret (it reads it from Vault).
+  const { data: authorized, error: authError } = await db.rpc("daylog_verify_dispatch_secret", {
+    p_secret: request.headers.get("x-daylog-secret") ?? "",
+  });
+  if (authError || authorized !== true) return new Response("Unauthorized", { status: 401 });
 
   const vapid: VapidKeys = {
     publicKey: env("VAPID_PUBLIC_KEY"),
     privateKey: env("VAPID_PRIVATE_KEY"),
-    subject: env("VAPID_SUBJECT"),
+    // Contact for the push services (mailto: or https:).
+    subject: Deno.env.get("VAPID_SUBJECT") ?? "https://egliitis.id.lv",
   };
-  const db = createClient(env("SUPABASE_URL"), secretKey(), { auth: { persistSession: false } });
 
   // Atomic claim (for update skip locked): overlapping runs never take the same row.
   const { data: rows, error: claimError } = await db.rpc("daylog_claim_pending");

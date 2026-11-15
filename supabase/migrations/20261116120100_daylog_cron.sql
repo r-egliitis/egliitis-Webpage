@@ -48,5 +48,17 @@ $$;
 revoke execute on function public.daylog_claim_pending() from public, anon, authenticated;
 grant execute on function public.daylog_claim_pending() to service_role;
 
+-- The Edge Function checks the x-daylog-secret header here, so the secret
+-- lives only in Vault (no copy in the function's environment).
+create or replace function public.daylog_verify_dispatch_secret(p_secret text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce(
+    (select decrypted_secret = p_secret and length(p_secret) >= 32
+       from vault.decrypted_secrets where name = 'daylog_cron_secret'),
+    false);
+$$;
+revoke execute on function public.daylog_verify_dispatch_secret(text) from public, anon, authenticated;
+grant execute on function public.daylog_verify_dispatch_secret(text) to service_role;
+
 select cron.schedule('daylog-tick', '* * * * *',
   $$ select public.daylog_tick(); select public.daylog_dispatch(); $$);
