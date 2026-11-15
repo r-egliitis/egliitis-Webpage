@@ -54,11 +54,38 @@ async function pausesFor(dayId: string): Promise<PauseRow[]> {
   return toPauses(data);
 }
 
+/**
+ * Quiet mode: true when the day's pings have stopped because N went
+ * unanswered. Same rule as daylog_due_notifications in SQL.
+ */
+async function isQuiet(day: DaylogDay): Promise<boolean> {
+  const snapshot = day.settings_snapshot;
+  if (snapshot?.unanswered_ping_mode !== "quiet_after" || !day.started_at) return false;
+  const supabase = await db();
+  const { data: last, error } = await supabase
+    .from("daylog_entries")
+    .select("created_at")
+    .eq("day_id", day.id)
+    .eq("skipped", false)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const { count, error: countError } = await supabase
+    .from("notification_log")
+    .select("id", { count: "exact", head: true })
+    .eq("day_id", day.id)
+    .eq("kind", "slot")
+    .gt("created_at", last?.created_at ?? day.started_at);
+  if (countError) throw countError;
+  return (count ?? 0) >= snapshot.quiet_after_unanswered;
+}
+
 export type DaylogHome = {
   today: string;
   serverNow: number;
   /** The day being tracked right now, with its entries and pauses. */
-  active: { day: DaylogDay; entries: TimelineEntry[]; pauses: PauseRow[] } | null;
+  active: { day: DaylogDay; entries: TimelineEntry[]; pauses: PauseRow[]; quiet: boolean } | null;
   /** Today's row if it exists (scheduled, ended or missed). */
   todayDay: DaylogDay | null;
   /** Days in the visible month, plus every upcoming scheduled day. */
@@ -107,7 +134,12 @@ export async function getDaylogHome(month: string): Promise<DaylogHome> {
     today,
     serverNow: Date.now(),
     active: activeDay
-      ? { day: activeDay, entries: await entriesFor(activeDay.id), pauses: await pausesFor(activeDay.id) }
+      ? {
+          day: activeDay,
+          entries: await entriesFor(activeDay.id),
+          pauses: await pausesFor(activeDay.id),
+          quiet: await isQuiet(activeDay),
+        }
       : null,
     todayDay: todayRow,
     days: daysResult.data,

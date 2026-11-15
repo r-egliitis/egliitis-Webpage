@@ -5,7 +5,9 @@ import { useCallback, useMemo, useState } from "react";
 import { deleteEntry, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
 import { EntrySheet } from "@/components/daylog/entry-sheet";
 import { EntryStack } from "@/components/daylog/entry-stack";
+import { ReviewView } from "@/components/daylog/review-view";
 import { Toast, type ToastMessage } from "@/components/os/toast";
+import { cn } from "@/lib/utils";
 import { toDayShape } from "@/lib/daylog/map";
 import { buildTimeline, effectivePauseEnd, timelineCounts, type Slot, type TimelineEntry } from "@/lib/daylog/slots";
 import type { PauseRow } from "@/lib/daylog/map";
@@ -21,10 +23,13 @@ type DayHistoryProps = {
   pauses: PauseRow[];
   tags: DaylogTag[];
   serverNow: number;
+  /** Open in tag-review mode (after End day, or ?review=1). */
+  review?: boolean;
 };
 
 // A past (or the running) day as one timeline. Gaps can still be filled in.
-export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tags: serverTags, serverNow }: DayHistoryProps) {
+export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tags: serverTags, serverNow, review = false }: DayHistoryProps) {
+  const [reviewing, setReviewing] = useState(review);
   const shape = useMemo(() => toDayShape(day)!, [day]);
   const { entries, run, error, clearError } = useOptimisticEntries(serverEntries);
   const pauses = useMemo(
@@ -74,6 +79,13 @@ export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tag
     void run({ type: "remove", id: entry.id }, () => deleteEntry(entry.id));
   }
 
+  function setTags(entry: TimelineEntry, tagIds: string[]) {
+    void run({ type: "patch", id: entry.id, patch: { tagIds } }, async () => {
+      await tagsReady(tagIds);
+      return updateEntry({ id: entry.id, body: entry.body ?? "", tagIds });
+    });
+  }
+
   const end = shape.endedAt ?? serverNow;
 
   return (
@@ -89,21 +101,40 @@ export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tag
           {counts.empty > 0 && ` · ${counts.empty} empty`}
           {day.end_reason === "auto" && " · ended automatically"}
         </p>
-        {live && (
-          <Link href="/os/daylog" className="mt-4 inline-block text-sm underline decoration-line decoration-2 underline-offset-4 hover:decoration-fg">
-            Back to the live log
-          </Link>
-        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {live && (
+            <Link href="/os/daylog" className="rounded-full border border-line px-3 py-1.5 font-mono text-xs text-muted hover:border-fg hover:text-fg">
+              Back to the live log
+            </Link>
+          )}
+          {taggingMode !== "off" && (
+            <button
+              type="button"
+              aria-pressed={reviewing}
+              onClick={() => setReviewing((value) => !value)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 font-mono text-xs transition-colors",
+                reviewing ? "border-fg bg-fg text-surface" : "border-line text-muted hover:border-fg hover:text-fg",
+              )}
+            >
+              {reviewing ? "Done reviewing" : "Review tags"}
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="mt-8">
-        <EntryStack
-          items={items}
-          tags={tags}
-          composerRange={null}
-          onFill={fill}
-          onOpen={(entry) => setEditing({ entry, isNew: false })}
-        />
+        {reviewing ? (
+          <ReviewView entries={entries} tags={tags} onSetTags={setTags} onCreateTag={createTagLocal} />
+        ) : (
+          <EntryStack
+            items={items}
+            tags={tags}
+            composerRange={null}
+            onFill={fill}
+            onOpen={(entry) => setEditing({ entry, isNew: false })}
+          />
+        )}
       </div>
 
       <EntrySheet

@@ -147,7 +147,9 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
     setConfirmEnd(false);
     startEnding(async () => {
       const result = await endDay(day.id);
-      if (!result.ok) setToast({ id: Date.now(), text: result.error, tone: "error" });
+      if (!result.ok) return setToast({ id: Date.now(), text: result.error, tone: "error" });
+      // Tag during review: go straight to the day's review screen.
+      if (taggingMode === "review" || taggingMode === "both") router.push(`/os/daylog/${day.day}?review=1`);
     });
   }
 
@@ -229,6 +231,13 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
           </button>
         </nav>
       </header>
+
+      {data.active.quiet && !runningPause && (
+        <p role="status" className="mt-6 rounded-2xl border border-line px-4 py-3 text-sm">
+          <span aria-hidden className="mr-2 inline-block h-2 w-2 rounded-full bg-accent" />
+          Pings are paused until you write something.
+        </p>
+      )}
 
       <div className="mt-8">
         <EntryStack

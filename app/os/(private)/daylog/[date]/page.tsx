@@ -9,16 +9,16 @@ import { getDaylogDay } from "@/lib/daylog/queries";
 import { formatLongDate } from "@/lib/os/dates";
 
 // One Day Log day: its full timeline.
-export default function DaylogDayPage({ params }: PageProps<"/os/daylog/[date]">) {
+export default function DaylogDayPage({ params, searchParams }: PageProps<"/os/daylog/[date]">) {
   return (
     <Suspense fallback={<TodaySkeleton />}>
-      <DayData params={params} />
+      <DayData params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function DayData({ params }: Pick<PageProps<"/os/daylog/[date]">, "params">) {
-  const { date } = await params;
+async function DayData({ params, searchParams }: Pick<PageProps<"/os/daylog/[date]">, "params" | "searchParams">) {
+  const [{ date }, query] = await Promise.all([params, searchParams]);
   if (!z.iso.date().safeParse(date).success) notFound();
   const result = await getDaylogDay(date);
   if (!result) notFound();
@@ -39,5 +39,14 @@ async function DayData({ params }: Pick<PageProps<"/os/daylog/[date]">, "params"
       </div>
     );
   }
-  return <DayHistory day={day} entries={entries} pauses={pauses} tags={tags} serverNow={serverNow} />;
+  return (
+    <DayHistory
+      day={day}
+      entries={entries}
+      pauses={pauses}
+      tags={tags}
+      serverNow={serverNow}
+      review={query.review === "1"}
+    />
+  );
 }
