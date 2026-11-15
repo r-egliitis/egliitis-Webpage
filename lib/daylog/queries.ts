@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { toPauses, toTimelineEntries, type PauseRow } from "@/lib/daylog/map";
 import type { TimelineEntry } from "@/lib/daylog/slots";
+import { toTsQuery } from "@/lib/daylog/search";
 import { shiftMonth } from "@/lib/daylog/time";
 import { todayInRiga } from "@/lib/os/dates";
 import { createClient, getUser } from "@/lib/supabase/server";
@@ -146,6 +147,47 @@ export async function getDaylogHome(month: string): Promise<DaylogHome> {
     recent: recentResult.data,
     tags,
   };
+}
+
+export type SearchResult = {
+  id: string;
+  day: string;
+  kind: "opening" | "slot" | "pause";
+  start: number;
+  end: number;
+  body: string;
+};
+
+/** Full-text search over every written entry, newest first (max 50). */
+export async function searchEntries(query: string): Promise<SearchResult[]> {
+  const tsquery = toTsQuery(query);
+  if (!tsquery) return [];
+  const supabase = await db();
+  const { data: rows, error } = await supabase
+    .from("daylog_entries")
+    .select("id, day_id, kind, start_at, end_at, body")
+    .eq("skipped", false)
+    .textSearch("search", tsquery, { config: "simple" })
+    .order("start_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  if (rows.length === 0) return [];
+
+  const { data: days, error: dayError } = await supabase
+    .from("daylog_days")
+    .select("id, day")
+    .in("id", [...new Set(rows.map((row) => row.day_id))]);
+  if (dayError) throw dayError;
+  const dayById = new Map(days.map((day) => [day.id, day.day]));
+
+  return rows.map((row) => ({
+    id: row.id,
+    day: dayById.get(row.day_id) ?? "",
+    kind: row.kind,
+    start: Date.parse(row.start_at),
+    end: Date.parse(row.end_at),
+    body: row.body ?? "",
+  }));
 }
 
 /** Your settings, or the defaults (one source: daylog_settings_json in SQL). */

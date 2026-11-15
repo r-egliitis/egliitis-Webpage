@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteEntry, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
 import { EntrySheet } from "@/components/daylog/entry-sheet";
 import { EntryStack } from "@/components/daylog/entry-stack";
@@ -49,6 +49,12 @@ export function DayHistory({ day, entries: serverEntries, pauses: pauseRows, tag
   const [editing, setEditing] = useState<{ entry: TimelineEntry; isNew: boolean } | null>(null);
   const live = day.status === "active";
   const taggingMode = day.settings_snapshot?.tagging_mode ?? "while_writing";
+  // A search result links to #entry-<id>; the page streams in, so scroll once it's here.
+  useEffect(() => {
+    const target = window.location.hash.startsWith("#entry-") ? document.getElementById(window.location.hash.slice(1)) : null;
+    target?.scrollIntoView({ block: "center" });
+  }, []);
+
   const stats = useMemo(() => dayStats(shape, items, pauses, serverNow), [shape, items, pauses, serverNow]);
   const text = useMemo(() => dayToText(day.day, items, stats, tags), [day.day, items, stats, tags]);
 
