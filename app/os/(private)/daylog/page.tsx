@@ -24,7 +24,9 @@ async function DaylogData({ searchParams }: Pick<PageProps<"/os/daylog">, "searc
   const month = MONTH.test(monthParam) ? monthParam : data.today.slice(0, 7);
 
   if (data.active) {
-    return <DaylogActive data={{ ...data, active: data.active }} month={month} slotParam={first(params.slot) ?? null} />;
+    const slot = first(params.slot) ?? null;
+    // Keyed by the slot so a notification tapped while the app is open re-targets the composer.
+    return <DaylogActive key={slot ?? "latest"} data={{ ...data, active: data.active }} month={month} slotParam={slot} />;
   }
   return <DaylogHome data={data} month={month} />;
 }
