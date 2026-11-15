@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
-import { ProjectsIcon, TasksIcon, TodayIcon } from "@/components/os/os-icons";
+import { DaylogIcon, ProjectsIcon, TasksIcon, TodayIcon } from "@/components/os/os-icons";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -15,6 +15,7 @@ const items = [
     Icon: ProjectsIcon,
     match: (path: string) => path.startsWith("/os/projects"),
   },
+  { href: "/os/daylog", label: "Day Log", Icon: DaylogIcon, match: (path: string) => path.startsWith("/os/daylog") },
 ] as const;
 
 // The pathname is runtime data on dynamic routes (/os/projects/[id]), so the

@@ -38,6 +38,16 @@ export function TasksIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function DaylogIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M4 6h10M4 11h7M4 16h5" />
+      <circle cx="17.5" cy="15.5" r="4" />
+      <path d="M17.5 13.5v2l1.3 1" />
+    </Icon>
+  );
+}
+
 export function ProjectsIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>
