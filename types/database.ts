@@ -156,6 +156,7 @@ export type Database = {
     Views: { [_ in never]: never };
     Functions: {
       daylog_request_test_push: { Args: Record<string, never>; Returns: undefined };
+      daylog_settings_json: { Args: { p_user: string }; Returns: Json };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

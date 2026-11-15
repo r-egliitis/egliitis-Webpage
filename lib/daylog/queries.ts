@@ -6,7 +6,7 @@ import type { TimelineEntry } from "@/lib/daylog/slots";
 import { shiftMonth } from "@/lib/daylog/time";
 import { todayInRiga } from "@/lib/os/dates";
 import { createClient, getUser } from "@/lib/supabase/server";
-import type { DaylogDay, DaylogTag } from "@/types/database";
+import type { DaylogDay, DaylogSettings, DaylogTag } from "@/types/database";
 
 // Day Log reads. Run on the server with the signed-in user's session (RLS).
 
@@ -101,6 +101,16 @@ export async function getDaylogHome(month: string): Promise<DaylogHome> {
     recent: recentResult.data,
     tags,
   };
+}
+
+/** Your settings, or the defaults (one source: daylog_settings_json in SQL). */
+export async function getDaylogSettings(): Promise<DaylogSettings> {
+  const user = await getUser();
+  if (!user) throw new Error("Not signed in.");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("daylog_settings_json", { p_user: user.id });
+  if (error) throw error;
+  return data as unknown as DaylogSettings;
 }
 
 /** One day by date, with its entries, for the history view. */

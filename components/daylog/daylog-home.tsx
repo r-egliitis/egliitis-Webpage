@@ -33,12 +33,20 @@ export function DaylogHome({ data, month }: { data: HomeData; month: string }) {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">{formatLongDate(data.today)}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Day Log</h1>
         </div>
-        <Link
-          href="/os/daylog/setup"
-          className="rounded-full border border-line px-3 py-1.5 font-mono text-xs text-muted transition-colors hover:border-fg hover:text-fg"
-        >
-          Setup
-        </Link>
+        <nav aria-label="Day Log" className="flex gap-2">
+          {[
+            { href: "/os/daylog/settings", label: "Settings" },
+            { href: "/os/daylog/setup", label: "Setup" },
+          ].map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              className="rounded-full border border-line px-3 py-1.5 font-mono text-xs text-muted transition-colors hover:border-fg hover:text-fg"
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
       </header>
 
       <section aria-label="Today" className={`mt-8 ${cardClass}`}>

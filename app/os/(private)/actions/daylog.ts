@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import {
   createTag as createTagSchema,
+  daylogSettings as daylogSettingsSchema,
+  updateTag as updateTagSchema,
   dayRef,
   entryRef,
   pushSubscription as pushSubscriptionSchema,
@@ -10,6 +12,8 @@ import {
   updateEntry as updateEntrySchema,
   writeEntry as writeEntrySchema,
   type CreateTagInput,
+  type DaylogSettingsInput,
+  type UpdateTagInput,
   type PushSubscriptionInput,
   type UpdateEntryInput,
   type WriteEntryInput,
@@ -203,6 +207,44 @@ export async function sendTestPush(): Promise<ActionResult> {
     };
   }
   return { ok: true };
+}
+
+/** Saves your settings. They apply from the next day you start. */
+export async function saveSettings(input: DaylogSettingsInput): Promise<ActionResult> {
+  const parsed = daylogSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+
+  const { error } = await session.supabase
+    .from("daylog_settings")
+    .upsert({ ...parsed.data, user_id: session.userId, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+  return error ? failed("saveSettings", error) : done();
+}
+
+export async function updateTag(input: UpdateTagInput): Promise<ActionResult> {
+  const parsed = updateTagSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+
+  const { id, name, color } = parsed.data;
+  const { error } = await session.supabase
+    .from("daylog_tags")
+    .update({ ...(name !== undefined && { name }), ...(color !== undefined && { color }) })
+    .eq("id", id);
+  return error ? failed("updateTag", error) : done();
+}
+
+/** Deletes a tag; entries keep their text and simply lose the tag. */
+export async function deleteTag(id: string): Promise<ActionResult> {
+  const parsed = entryRef.safeParse({ id });
+  if (!parsed.success) return { ok: false, error: "That tag doesn't exist." };
+  const session = await signedInClient();
+  if (!session) return SESSION_EXPIRED;
+
+  const { error } = await session.supabase.from("daylog_tags").delete().eq("id", parsed.data.id);
+  return error ? failed("deleteTag", error) : done();
 }
 
 export async function createTag(input: CreateTagInput): Promise<ActionResult> {
