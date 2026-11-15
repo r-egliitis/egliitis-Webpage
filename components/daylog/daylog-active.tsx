@@ -3,15 +3,26 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { writeEntry } from "@/app/os/(private)/actions/daylog";
+import { createTag, deleteEntry, updateEntry, writeEntry } from "@/app/os/(private)/actions/daylog";
 import { Composer, type ComposerSubmit } from "@/components/daylog/composer";
 import { DaylogCalendar } from "@/components/daylog/daylog-calendar";
+import { EntrySheet } from "@/components/daylog/entry-sheet";
 import { EntryStack } from "@/components/daylog/entry-stack";
 import { Sheet, SheetHeader } from "@/components/os/sheet";
 import { Toast, type ToastMessage } from "@/components/os/toast";
 import { toDayShape } from "@/lib/daylog/map";
 import type { DaylogHome } from "@/lib/daylog/queries";
-import { buildTimeline, composerSlot, earlierEmptySlots, slotFromParam, timelineCounts, type Slot } from "@/lib/daylog/slots";
+import {
+  buildTimeline,
+  composerSlot,
+  earlierEmptySlots,
+  slotFromParam,
+  timelineCounts,
+  type Slot,
+  type TimelineEntry,
+} from "@/lib/daylog/slots";
+import { TAG_COLORS } from "@/lib/daylog/tag-colors";
+import type { DaylogTag } from "@/types/database";
 import { formatTime } from "@/lib/daylog/time";
 import { useClock } from "@/lib/daylog/use-clock";
 import { useOptimisticEntries } from "@/lib/daylog/use-optimistic-entries";
@@ -23,6 +34,8 @@ type DaylogActiveProps = {
   /** ?slot= from a notification: focus that slot. */
   slotParam: string | null;
 };
+
+type TagLite = Pick<DaylogTag, "id" | "name" | "color">;
 
 const secondaryClass =
   "rounded-full border border-line px-3 py-1.5 font-mono text-xs text-muted transition-colors hover:border-fg hover:text-fg";
@@ -69,6 +82,32 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
     if (slotParam) inputRef.current?.focus();
   }, [slotParam]);
 
+  // Tags: server list plus ones created here that the server hasn't returned yet.
+  const [localTags, setLocalTags] = useState<TagLite[]>([]);
+  const tags = useMemo(
+    () => [...data.tags, ...localTags.filter((tag) => !data.tags.some((known) => known.id === tag.id))],
+    [data.tags, localTags],
+  );
+  const pendingTags = useRef(new Map<string, Promise<unknown>>());
+  const taggingMode = day.settings_snapshot?.tagging_mode ?? "while_writing";
+
+  const createTagLocal = useCallback(
+    (name: string) => {
+      const id = crypto.randomUUID();
+      const color = TAG_COLORS[(data.tags.length + localTags.length) % TAG_COLORS.length];
+      setLocalTags((current) => [...current, { id, name, color }]);
+      const promise = createTag({ id, name, color }).then((result) => {
+        if (!result.ok) setToast({ id: Date.now(), text: result.error, tone: "error" });
+      });
+      pendingTags.current.set(id, promise);
+      return id;
+    },
+    [data.tags.length, localTags.length],
+  );
+
+  // Entries may reference a tag created a moment ago; wait for it to exist.
+  const tagsReady = useCallback((tagIds: string[]) => Promise.all(tagIds.map((id) => pendingTags.current.get(id))), []);
+
   const submit = useCallback(
     (entry: ComposerSubmit) => {
       const id = crypto.randomUUID();
@@ -78,8 +117,9 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
           type: "add",
           entry: { id, kind: "slot", start: entry.start, end: entry.end, body: entry.body, skipped: false, tagIds: entry.tagIds },
         },
-        () =>
-          writeEntry({
+        async () => {
+          await tagsReady(entry.tagIds);
+          return writeEntry({
             kind: "slot",
             id,
             dayId: day.id,
@@ -87,12 +127,26 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
             endAt: new Date(entry.end).toISOString(),
             body: entry.body,
             tagIds: entry.tagIds,
-          }),
+          });
+        },
       );
       requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }));
     },
-    [day.id, run],
+    [day.id, run, tagsReady],
   );
+
+  const [editing, setEditing] = useState<TimelineEntry | null>(null);
+
+  function saveEntry(entry: TimelineEntry, body: string, tagIds: string[]) {
+    void run({ type: "patch", id: entry.id, patch: { body, tagIds } }, async () => {
+      await tagsReady(tagIds);
+      return updateEntry({ id: entry.id, body, tagIds });
+    });
+  }
+
+  function removeEntry(entry: TimelineEntry) {
+    void run({ type: "remove", id: entry.id }, () => deleteEntry(entry.id));
+  }
 
   function fill(slot: Slot) {
     setPicked(slot);
@@ -131,9 +185,10 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
       <div className="mt-8">
         <EntryStack
           items={items}
-          tags={data.tags}
+          tags={tags}
           composerRange={target && composerStart !== undefined ? { start: composerStart, end: target.end } : null}
           onFill={fill}
+          onOpen={setEditing}
         />
       </div>
       <div ref={bottomRef} />
@@ -148,6 +203,9 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
               earlier={earlier}
               extra={extra}
               onExtraChange={(value) => setExtend({ target: target.start, extra: value })}
+              tags={tags}
+              showTags={taggingMode === "while_writing" || taggingMode === "both"}
+              onCreateTag={createTagLocal}
               backfilling={backfilling}
               now={now}
               onSubmit={submit}
@@ -171,6 +229,15 @@ export function DaylogActive({ data, month, slotParam }: DaylogActiveProps) {
           </div>
         </div>
       </Sheet>
+      <EntrySheet
+        entry={editing}
+        tags={tags}
+        showTags={taggingMode !== "off"}
+        onClose={() => setEditing(null)}
+        onSave={saveEntry}
+        onDelete={removeEntry}
+        onCreateTag={createTagLocal}
+      />
       <Toast toast={errorToast ?? toast} onDismiss={error ? clearError : dismissToast} />
     </div>
   );

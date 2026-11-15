@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent, type RefObject } from "react";
 import { EntryInput } from "@/components/daylog/entry-input";
+import { TagChips } from "@/components/daylog/tag-chips";
+import type { DaylogTag } from "@/types/database";
 import type { Slot } from "@/lib/daylog/slots";
 import { rangeLabel } from "@/lib/daylog/time";
 
@@ -14,6 +16,10 @@ type ComposerProps = {
   /** How many of `earlier` this entry also covers. */
   extra: number;
   onExtraChange: (extra: number) => void;
+  tags: Pick<DaylogTag, "id" | "name" | "color">[];
+  showTags: boolean;
+  /** Creates a tag and returns its id. */
+  onCreateTag: (name: string) => string;
   /** True when the target was picked by tapping an older gap. */
   backfilling: boolean;
   now: number;
@@ -26,8 +32,24 @@ type ComposerProps = {
 const stepButton =
   "h-7 min-w-7 rounded-full border border-line px-2 font-mono text-xs text-muted transition-colors hover:border-fg hover:text-fg disabled:opacity-30 disabled:hover:border-line disabled:hover:text-muted";
 
-export function Composer({ target, earlier, extra, onExtraChange: setExtra, backfilling, now, onSubmit, onCancelBackfill, inputRef }: ComposerProps) {
+export function Composer({
+  target,
+  earlier,
+  extra,
+  onExtraChange: setExtra,
+  tags,
+  showTags,
+  onCreateTag,
+  backfilling,
+  now,
+  onSubmit,
+  onCancelBackfill,
+  inputRef,
+}: ComposerProps) {
   const [body, setBody] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const toggleTag = (id: string) =>
+    setTagIds((current) => (current.includes(id) ? current.filter((tagId) => tagId !== id) : [...current, id]));
   const covered = Math.min(extra, earlier.length);
   const start = covered > 0 ? earlier[covered - 1].start : target.start;
   const running = target.end > now;
@@ -37,8 +59,9 @@ export function Composer({ target, earlier, extra, onExtraChange: setExtra, back
     event?.preventDefault();
     const text = body.trim();
     if (!text) return;
-    onSubmit({ start, end: target.end, body: text, tagIds: [] });
+    onSubmit({ start, end: target.end, body: text, tagIds });
     setBody("");
+    setTagIds([]);
     setExtra(0);
   }
 
@@ -76,6 +99,17 @@ export function Composer({ target, earlier, extra, onExtraChange: setExtra, back
         submitLabel="Save entry"
         inputRef={inputRef}
       />
+      {showTags && (
+        <div className="px-1 pt-2">
+          <TagChips
+            compact
+            tags={tags}
+            selected={tagIds}
+            onToggle={toggleTag}
+            onCreate={(name) => setTagIds((current) => [...current, onCreateTag(name)])}
+          />
+        </div>
+      )}
     </form>
   );
 }

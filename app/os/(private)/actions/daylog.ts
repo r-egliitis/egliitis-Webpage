@@ -12,6 +12,7 @@ import {
   type UpdateEntryInput,
   type WriteEntryInput,
 } from "@/lib/daylog/schemas";
+import { TAG_COLORS } from "@/lib/daylog/tag-colors";
 import { firstIssue, type ActionResult } from "@/lib/os/schemas";
 import { dbErrorMessage, SESSION_EXPIRED, signedInClient } from "@/lib/os/server-action";
 
@@ -160,8 +161,6 @@ export async function endDay(dayId: string): Promise<ActionResult> {
     .eq("status", "active");
   return error ? failed("endDay", error) : done();
 }
-
-const TAG_COLORS = ["#4F8CFF", "#3DDC97", "#FFB020", "#B37BFF", "#FF6B6B", "#2EC4D6", "#F78FB3", "#9BC53D"];
 
 export async function createTag(input: CreateTagInput): Promise<ActionResult> {
   const parsed = createTagSchema.safeParse(input);

@@ -8,7 +8,7 @@ import type { DaylogTag } from "@/types/database";
 
 type EntryStackProps = {
   items: TimelineItem[];
-  tags: DaylogTag[];
+  tags: Pick<DaylogTag, "id" | "name" | "color">[];
   /** The time the composer is writing (one or more slots); hidden from the stack. */
   composerRange: Slot | null;
   onFill?: (slot: Slot) => void;
