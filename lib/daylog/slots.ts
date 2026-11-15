@@ -169,8 +169,10 @@ export function slotFromParam(items: TimelineItem[], param: string | null): Slot
   if (!param) return null;
   const at = Date.parse(param);
   if (Number.isNaN(at)) return null;
+  // The link has whole seconds (rounded down); a day's first slot can start at
+  // a fractional second, so allow up to 1 s before the slot.
   for (const item of items) {
-    if ((item.type === "empty" || item.type === "current") && item.slot.start === at) return item.slot;
+    if ((item.type === "empty" || item.type === "current") && item.slot.start - 1000 < at && at < item.slot.end) return item.slot;
   }
   return null;
 }
